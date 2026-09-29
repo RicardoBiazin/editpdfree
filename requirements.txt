@@ -1,0 +1,18 @@
+# EditPDFree -- dependencias, com versao exata.
+#
+# Interpretador: Python 3.13.
+# Instalar:  .venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# Versao exata e nao ">=": o scanner de vulnerabilidade (OSV) so' sabe dizer se
+# ha' CVE quando a versao esta' escrita aqui, e faixa aberta faz o build de
+# hoje diferir do de amanha sem ninguem mexer em nada.
+
+# Motor PDF (MuPDF). AGPL-3.0 -- e' por causa dele que este projeto e' AGPL.
+pymupdf==1.28.2
+
+# Interface grafica. LGPLv3. NAO usar o metapacote 'PySide6': ele arrasta
+# PySide6-Addons, um wheel de ~170 MB com QtWebEngine que nao usamos.
+PySide6-Essentials==6.11.2
+
+# Empacotamento. So' de desenvolvimento; nao vai dentro do .exe.
+pyinstaller==6.22.3

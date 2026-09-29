@@ -1,0 +1,134 @@
+"""Marca d'agua, numeracao, compressao, exportacao e metadados."""
+
+from __future__ import annotations
+
+import math
+import os
+import pathlib
+
+import pymupdf
+
+from .documento import Documento
+
+
+def _girado_para_pdf(p: pymupdf.Page, x: float, y: float) -> pymupdf.Point:
+    return pymupdf.Point(x, y) * p.derotation_matrix
+
+
+def marca_dagua(d: Documento, texto: str, *, tamanho: float = 60,
+                cor=(0.6, 0.6, 0.6), opacidade: float = 0.3,
+                diagonal: bool = True,
+                paginas: list[int] | None = None) -> None:
+    """Texto grande e translucido no centro de cada pagina."""
+    if not texto.strip():
+        raise ValueError("Informe o texto da marca d’água.")
+    alvo = paginas if paginas is not None else range(d.paginas)
+    largura = pymupdf.get_text_length(texto, fontname="helv",
+                                      fontsize=tamanho)
+    with d.operacao("Marca d’água"):
+        for i in alvo:
+            p = d.doc[i]
+            # O angulo e' o que o LEITOR ve; a rotacao da pagina entra na
+            # conta porque o texto e' escrito no espaco sem rotacao.
+            angulo = (45 if diagonal else 0) + p.rotation
+            rad = math.radians(angulo)
+            centro = _girado_para_pdf(p, p.rect.width / 2, p.rect.height / 2)
+            # Recua meia largura ao longo da direcao do texto e meia altura na
+            # perpendicular, para o CENTRO do texto cair no centro da pagina.
+            ux, uy = math.cos(rad), -math.sin(rad)
+            inicio = pymupdf.Point(
+                centro.x - ux * largura / 2 - uy * tamanho * 0.35,
+                centro.y - uy * largura / 2 + ux * tamanho * 0.35)
+            p.insert_text(inicio, texto, fontsize=tamanho, fontname="helv",
+                          color=cor, fill_opacity=opacidade,
+                          stroke_opacity=opacidade,
+                          morph=(inicio, pymupdf.Matrix(angulo)))
+
+
+POSICOES = {
+    "inferior-centro": "Rodapé, centro",
+    "inferior-direita": "Rodapé, direita",
+    "inferior-esquerda": "Rodapé, esquerda",
+    "superior-centro": "Cabeçalho, centro",
+    "superior-direita": "Cabeçalho, direita",
+    "superior-esquerda": "Cabeçalho, esquerda",
+}
+
+
+def numerar(d: Documento, *, formato: str = "{n} / {total}",
+            posicao: str = "inferior-centro", tamanho: float = 10,
+            cor=(0, 0, 0), inicio: int = 1, margem: float = 24) -> None:
+    """Numero em cada pagina. `formato` aceita {n} e {total}."""
+    if posicao not in POSICOES:
+        raise ValueError(f"posição inválida: {posicao}")
+    try:
+        formato.format(n=1, total=1)
+    except (KeyError, IndexError, ValueError):
+        raise ValueError("O formato só aceita {n} e {total}.") from None
+    total = d.paginas + inicio - 1
+    with d.operacao("Numerar páginas"):
+        for i in range(d.paginas):
+            p = d.doc[i]
+            texto = formato.format(n=i + inicio, total=total)
+            largura = pymupdf.get_text_length(texto, fontname="helv",
+                                              fontsize=tamanho)
+            w, h = p.rect.width, p.rect.height
+            vertical, horizontal = posicao.split("-")
+            y = h - margem if vertical == "inferior" else margem + tamanho
+            x = {"centro": (w - largura) / 2, "esquerda": margem,
+                 "direita": w - margem - largura}[horizontal]
+            p.insert_text(_girado_para_pdf(p, x, y), texto, fontsize=tamanho,
+                          fontname="helv", color=cor, rotate=p.rotation)
+
+
+def comprimir(d: Documento, *, dpi: int = 110, qualidade: int = 70) -> None:
+    """Reamostra imagens acima de `dpi` e subconjunta as fontes. O resto do
+    ganho vem de gravar com garbage/deflate, que `Documento.salvar` ja' faz."""
+    with d.operacao("Comprimir"):
+        d.doc.rewrite_images(dpi_threshold=int(dpi * 1.3), dpi_target=dpi,
+                             quality=qualidade)
+        try:
+            d.doc.subset_fonts()
+        except Exception:                         # noqa: BLE001
+            # Fonte que nao se deixa subconjuntar fica como estava; a
+            # reamostragem das imagens continua valendo.
+            pass
+
+
+def exportar_imagens(d: Documento, pasta: str | os.PathLike, *,
+                     dpi: int = 150, formato: str = "png",
+                     paginas: list[int] | None = None) -> list[pathlib.Path]:
+    pasta = pathlib.Path(pasta)
+    pasta.mkdir(parents=True, exist_ok=True)
+    base = pathlib.Path(d.nome).stem
+    saidas = []
+    for i in (paginas if paginas is not None else range(d.paginas)):
+        destino = pasta / f"{base}_p{i + 1:03d}.{formato}"
+        pix = d.doc[i].get_pixmap(dpi=dpi, alpha=False)
+        if formato in ("jpg", "jpeg"):
+            pix.save(destino, jpg_quality=90)
+        else:
+            pix.save(destino)
+        saidas.append(destino)
+    return saidas
+
+
+CAMPOS_METADADOS = {"title": "Título", "author": "Autor",
+                    "subject": "Assunto", "keywords": "Palavras-chave",
+                    "creator": "Aplicativo de criação",
+                    "producer": "Produtor"}
+
+
+def metadados(d: Documento) -> dict[str, str]:
+    m = d.doc.metadata or {}
+    return {k: m.get(k) or "" for k in CAMPOS_METADADOS}
+
+
+def definir_metadados(d: Documento, valores: dict[str, str]) -> None:
+    atual = metadados(d)
+    novo = {**atual, **{k: v for k, v in valores.items()
+                        if k in CAMPOS_METADADOS}}
+    if novo == atual:
+        return
+    with d.operacao("Propriedades do documento"):
+        d.doc.set_metadata(novo)

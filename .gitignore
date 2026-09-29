@@ -1,0 +1,11 @@
+# Ambiente
+.venv/
+__pycache__/
+*.pyc
+
+# Build
+build/
+dist/
+
+# Temporarios da gravacao atomica (ver editpdfree/documento.py)
+*.epfnew
