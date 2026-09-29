@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.1.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.2.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
@@ -24,6 +24,26 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 - Caneta à mão livre, retângulo, elipse, linha e seta, com cor, espessura e opacidade
 - Imagem e assinatura (desenhada com o mouse ou a partir de uma imagem)
 - Selecionar uma anotação para movê-la (arrastar) ou excluí-la (Delete)
+
+**Assinatura digital (ICP-Brasil)**
+- Assinar com certificado A1 (`.pfx`/`.p12`) no padrão PAdES: visível (na área desenhada) ou invisível. O Adobe e o validador do ITI mostram "assinado por…"
+- O documento assinado é salvo como arquivo novo, por atualização incremental; qualquer alteração posterior invalida a assinatura
+- Verificar as assinaturas de um PDF: íntegra (nada mudou) e confiável (cadeia ICP-Brasil — as raízes do ITI vêm junto)
+
+**OCR**
+- Reconhecer o texto de PDFs escaneados (português e inglês), sem instalar nada: a página continua igual e passa a permitir busca, seleção, cópia e tarja
+
+**Converter**
+- Abrir DOCX, XLSX, PPTX, TXT, HTML, EPUB e imagens direto como PDF (usa o LibreOffice se estiver instalado, para mais fidelidade)
+- PDF para Word (`.docx`), para imagens e para texto
+
+**Produtividade**
+- Processar em lote: OCR, girar, marca d'água, numeração, rodapé, compressão e senha numa pasta inteira (os originais não são alterados)
+- Comparar duas versões de um PDF lado a lado, com as diferenças destacadas e listadas
+- Recortar páginas (por margens ou desenhando a área) e redimensionar (A4, A3, A5, Carta, Ofício)
+- Cabeçalho e rodapé com `{n}`, `{total}`, `{arquivo}` e `{data}`; carimbos prontos (APROVADO, CÓPIA, PAGO, RECEBIDO…)
+- Marcadores (sumário lateral) e links para páginas ou sites
+- Imprimir (Ctrl+P)
 
 **Documento**
 - Preencher formulários, criar campos de texto e caixas de seleção, achatar
@@ -67,8 +87,11 @@ build.bat umarquivo    :: dist\EditPDFree.exe portátil
 - Ao editar um texto existente, o texto novo usa a fonte padrão mais parecida (Helvetica, Times ou Courier). A fonte original quase sempre vem embutida só com as letras usadas e não serve para letras novas.
 - Só é possível editar texto horizontal.
 - Salvar um PDF assinado digitalmente invalida a assinatura (o programa avisa antes).
+- A assinatura digital não consulta revogação (LCR/OCSP) nem acrescenta carimbo de tempo; para a validação jurídica completa use o [validador do ITI](https://validar.iti.gov.br). A assinatura visível não funciona em página girada (use a invisível).
+- PDF para Word reconstrói parágrafos, fontes e imagens, mas não tabelas nem colunas.
+- Sem LibreOffice, DOCX/XLSX/PPTX são diagramados pelo MuPDF: tabelas complexas e fontes específicas podem mudar.
 - Um PDF protegido só por senha de proprietário (abre sem senha) perde essas restrições ao ser salvo, porque a senha de proprietário não é conhecida.
 
 ## Licença
 
-[AGPL-3.0](LICENSE). O motor de PDF é o [PyMuPDF](https://github.com/pymupdf/PyMuPDF)/MuPDF (AGPL-3.0); a interface usa [Qt for Python](https://doc.qt.io/qtforpython/) (LGPL-3.0).
+[AGPL-3.0](LICENSE). O motor de PDF é o [PyMuPDF](https://github.com/pymupdf/PyMuPDF)/MuPDF (AGPL-3.0); a interface usa [Qt for Python](https://doc.qt.io/qtforpython/) (LGPL-3.0); a assinatura, o [pyHanko](https://github.com/MatthiasValvekens/pyHanko) (MIT); o OCR, os dados do [Tesseract](https://github.com/tesseract-ocr/tessdata_fast) (Apache-2.0).

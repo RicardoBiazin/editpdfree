@@ -75,6 +75,8 @@ class Visualizador(QGraphicsView):
     selecaoFeita = Signal(int, object, object)
     #: (pagina, pymupdf.Point) -- clique num campo de formulario
     campoClicado = Signal(int, object)
+    #: (pagina, marcadores.Link, acao) -- acao: "seguir" ou "excluir"
+    linkAcionado = Signal(int, object, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -448,6 +450,12 @@ class Visualizador(QGraphicsView):
             self._arrasto = {"tipo": "mover", "pagina": pagina,
                              "xref": a.xref, "inicio": cena, "item": None}
             return
+        from .. import marcadores
+        link = marcadores.link_em(self.documento, pagina, ponto_pdf)
+        if link is not None:
+            self.selecionar_anotacao(None)
+            self.linkAcionado.emit(pagina, link, "seguir")
+            return
         if formularios.campo_em(self.documento, pagina, ponto_pdf):
             self.selecionar_anotacao(None)
             self.campoClicado.emit(pagina, ponto_pdf)
@@ -533,7 +541,8 @@ class Visualizador(QGraphicsView):
         if pequeno and self.ferramenta not in (Ferramenta.CAIXA_TEXTO,
                                                Ferramenta.IMAGEM,
                                                Ferramenta.CAMPO_TEXTO,
-                                               Ferramenta.CAIXA_SELECAO):
+                                               Ferramenta.CAIXA_SELECAO,
+                                               Ferramenta.ASSINAR_CERTIFICADO):
             return
         self.retanguloFeito.emit(self.ferramenta, pagina, rect)
 
@@ -549,9 +558,21 @@ class Visualizador(QGraphicsView):
             return
         from .. import anotacoes
         ponto = self.cena_para_pdf(pagina, cena)
+        from .. import marcadores
         p = self.documento.doc[pagina]     # referencia viva: ver anotacoes._achar
         a = anotacoes.anotacao_em(p, ponto, folga=3 / self.zoom)
         if a is None:
+            link = marcadores.link_em(self.documento, pagina, ponto)
+            if link is None:
+                return
+            menu = QMenu(self)
+            seguir = menu.addAction("Abrir link")
+            excluir = menu.addAction("Excluir link")
+            escolhida = menu.exec(evento.globalPosition().toPoint())
+            if escolhida is seguir:
+                self.linkAcionado.emit(pagina, link, "seguir")
+            elif escolhida is excluir:
+                self.linkAcionado.emit(pagina, link, "excluir")
             return
         self.selecionar_anotacao(pagina, a.xref)
         menu = QMenu(self)

@@ -33,6 +33,8 @@ class Config(dict):
         "opacidade": 1.0,
         "tamanho_fonte": 12.0,
         "ultima_pasta": "",
+        # So' o CAMINHO do .pfx; a senha nunca e' guardada.
+        "ultimo_certificado": "",
     }
 
     @classmethod

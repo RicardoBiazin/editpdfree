@@ -10,13 +10,14 @@ from PySide6.QtCore import QByteArray, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox,
                                QFileDialog, QLabel, QLineEdit, QMainWindow,
-                               QMessageBox, QSpinBox, QTabWidget, QToolBar)
+                               QMessageBox, QProgressDialog, QSpinBox,
+                               QTabWidget, QToolBar)
 
-from .. import (NOME, VERSAO, anotacoes, extras, formularios, paginas,
-                seguranca, texto)
+from .. import (NOME, VERSAO, anotacoes, assinatura_digital, conversao,
+                extras, formularios, lote, ocr, paginas, seguranca, texto)
 from ..documento import Documento, SenhaNecessaria
 from . import aba as modulo_aba
-from . import config, dialogos, icones
+from . import config, dialogos, dialogos_extras, icones
 from .aba import AbaDocumento
 from .ferramentas import INFO, Ferramenta
 
@@ -81,6 +82,20 @@ class JanelaPrincipal(QMainWindow):
         self.a_propriedades = a("P&ropriedades do documento…",
                                 self.propriedades)
         self.a_sair = a("Sai&r", self.close, "Ctrl+Q")
+        self.a_imprimir = a("&Imprimir…", self.imprimir, S.Print)
+        self.a_converter_para_pdf = a("Converter arquivos para PDF…",
+                                      self.converter_para_pdf)
+        self.a_para_word = a("PDF para Word (.docx)…", self.pdf_para_word)
+        self.a_lote = a("Processar em &lote…", self.processar_lote)
+        self.a_comparar = a("C&omparar PDFs…", self.comparar_pdfs)
+        self.a_ocr = a("Reconhecer texto (&OCR)…", self.reconhecer_texto)
+        self.a_assinar_cert = a("Assinar com certificado &digital…",
+                                self.assinar_certificado_menu)
+        self.a_verificar = a("&Verificar assinaturas…",
+                             self.verificar_assinaturas)
+        self.a_cabecalho = a("Cabeçalho e &rodapé…", self.cabecalho_rodape)
+        self.a_recortar = a("Recor&tar páginas…", self.recortar)
+        self.a_redimensionar = a("Redimensionar pá&ginas…", self.redimensionar)
 
         self.a_desfazer = a("&Desfazer", self.desfazer, S.Undo)
         self.a_refazer = a("&Refazer", self.refazer, S.Redo)
@@ -97,7 +112,7 @@ class JanelaPrincipal(QMainWindow):
                            lambda: self._vis("ajustar_largura"), "Ctrl+2")
         self.a_pagina = a("Ajustar à &página",
                           lambda: self._vis("ajustar_pagina"), "Ctrl+1")
-        self.a_miniaturas = a("&Miniaturas", self._alternar_miniaturas, "F4")
+        self.a_miniaturas = a("&Painel lateral", self._alternar_miniaturas, "F4")
         self.a_miniaturas.setCheckable(True)
         self.a_miniaturas.setChecked(True)
         self.a_anterior = a("Página anterior", lambda: self._ir(-1),
@@ -159,7 +174,9 @@ class JanelaPrincipal(QMainWindow):
                            (self.a_girar_dir, "girar_dir"),
                            (self.a_ampliar, "ampliar"),
                            (self.a_reduzir, "reduzir"),
-                           (self.a_largura, "largura")):
+                           (self.a_largura, "largura"),
+                           (self.a_imprimir, "imprimir"),
+                           (self.a_assinar_cert, "assinar_certificado")):
             acao.setIcon(icones.icone(nome))
 
         # Acoes que dependem de haver documento aberto.
@@ -174,6 +191,9 @@ class JanelaPrincipal(QMainWindow):
             self.a_dividir, self.a_subir, self.a_descer, self.a_formulario,
             self.a_achatar, self.a_tarjar_texto, self.a_marca, self.a_numerar,
             self.a_comprimir, self.a_proteger, self.a_desproteger,
+            self.a_imprimir, self.a_para_word, self.a_ocr, self.a_assinar_cert,
+            self.a_verificar, self.a_cabecalho, self.a_recortar,
+            self.a_redimensionar,
             *self.acoes_ferramenta.values()]
 
     def _criar_menus(self) -> None:
@@ -185,7 +205,13 @@ class JanelaPrincipal(QMainWindow):
         m.addSeparator()
         m.addActions([self.a_salvar, self.a_salvar_como])
         m.addSeparator()
-        m.addActions([self.a_juntar, self.a_exportar, self.a_extrair_texto])
+        m.addAction(self.a_imprimir)
+        m.addSeparator()
+        m.addAction(self.a_juntar)
+        conv = m.addMenu("Con&verter")
+        conv.addActions([self.a_converter_para_pdf, self.a_para_word,
+                         self.a_exportar, self.a_extrair_texto])
+        m.addActions([self.a_lote, self.a_comparar])
         m.addSeparator()
         m.addActions([self.a_propriedades, self.a_fechar])
         m.addSeparator()
@@ -214,6 +240,8 @@ class JanelaPrincipal(QMainWindow):
         m.addSeparator()
         m.addActions([self.a_extrair, self.a_dividir])
         m.addSeparator()
+        m.addActions([self.a_recortar, self.a_redimensionar])
+        m.addSeparator()
         m.addAction(self.a_excluir_pag)
 
         m = barra.addMenu("&Ferramentas")
@@ -224,8 +252,9 @@ class JanelaPrincipal(QMainWindow):
              Ferramenta.SUBLINHAR, Ferramenta.TACHAR],
             [Ferramenta.CANETA, Ferramenta.RETANGULO, Ferramenta.ELIPSE,
              Ferramenta.LINHA, Ferramenta.SETA],
-            [Ferramenta.IMAGEM, Ferramenta.ASSINATURA],
-            [Ferramenta.TARJAR],
+            [Ferramenta.IMAGEM, Ferramenta.ASSINATURA, Ferramenta.CARIMBO],
+            [Ferramenta.LINK, Ferramenta.RECORTAR],
+            [Ferramenta.TARJAR, Ferramenta.ASSINAR_CERTIFICADO],
             [Ferramenta.CAMPO_TEXTO, Ferramenta.CAIXA_SELECAO],
         ]
         for n, grupo in enumerate(grupos):
@@ -236,9 +265,13 @@ class JanelaPrincipal(QMainWindow):
         m.addAction(self.a_nova_assinatura)
 
         m = barra.addMenu("&Documento")
+        m.addAction(self.a_ocr)
+        m.addSeparator()
+        m.addActions([self.a_assinar_cert, self.a_verificar])
+        m.addSeparator()
         m.addActions([self.a_formulario, self.a_achatar])
         m.addSeparator()
-        m.addActions([self.a_marca, self.a_numerar])
+        m.addActions([self.a_marca, self.a_numerar, self.a_cabecalho])
         m.addSeparator()
         m.addActions([self.a_tarjar_texto, self.a_proteger,
                       self.a_desproteger])
@@ -253,7 +286,7 @@ class JanelaPrincipal(QMainWindow):
         b.setObjectName("barra_principal")
         b.setIconSize(QSize(22, 22))
         b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        b.addActions([self.a_abrir, self.a_salvar])
+        b.addActions([self.a_abrir, self.a_salvar, self.a_imprimir])
         b.addSeparator()
         b.addActions([self.a_desfazer, self.a_refazer])
         b.addSeparator()
@@ -302,7 +335,9 @@ class JanelaPrincipal(QMainWindow):
                            Ferramenta.TACHAR, Ferramenta.CANETA,
                            Ferramenta.RETANGULO, Ferramenta.ELIPSE,
                            Ferramenta.SETA, Ferramenta.IMAGEM,
-                           Ferramenta.ASSINATURA, Ferramenta.TARJAR):
+                           Ferramenta.ASSINATURA, Ferramenta.CARIMBO,
+                           Ferramenta.LINK, Ferramenta.TARJAR,
+                           Ferramenta.ASSINAR_CERTIFICADO):
             f.addAction(self.acoes_ferramenta[ferramenta])
         f.addSeparator()
         cor = self.cfg.get("cor") or [0.85, 0.1, 0.1]
@@ -376,13 +411,16 @@ class JanelaPrincipal(QMainWindow):
 
     def _alternar_miniaturas(self) -> None:
         for a in self.todas_as_abas():
-            a.miniaturas.setVisible(self.a_miniaturas.isChecked())
+            a.lateral.setVisible(self.a_miniaturas.isChecked())
 
     def _adicionar_aba(self, documento: Documento) -> AbaDocumento:
         aba = AbaDocumento(documento, self.estilo)
         aba.estadoMudou.connect(self._atualizar_estado)
         aba.mensagem.connect(lambda m: self.statusBar().showMessage(m, 5000))
-        aba.miniaturas.setVisible(self.a_miniaturas.isChecked())
+        aba.lateral.setVisible(self.a_miniaturas.isChecked())
+        aba.assinaturaDigitalPedida.connect(
+            lambda pagina, rect, aba=aba: self.assinar_certificado(aba, pagina,
+                                                                   rect))
         aba.visualizador.definir_ferramenta(self.ferramenta)
         indice = self.abas.addTab(aba, aba.titulo)
         self.abas.setCurrentIndex(indice)
@@ -407,7 +445,9 @@ class JanelaPrincipal(QMainWindow):
     def abrir_dialogo(self) -> None:
         arquivos, _ = QFileDialog.getOpenFileNames(
             self, "Abrir PDF", modulo_aba.pasta_padrao(self.cfg),
-            dialogos.FILTRO_ENTRADA)
+            "PDF e documentos (*.pdf *.docx *.xlsx *.pptx *.txt *.html *.htm "
+            "*.epub *.xps *.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff *.webp "
+            "*.svg);;Documentos PDF (*.pdf);;Todos os arquivos (*)")
         for arquivo in arquivos:
             self.abrir(arquivo)
 
@@ -421,9 +461,11 @@ class JanelaPrincipal(QMainWindow):
             modulo_aba.avisar(self, NOME, f"Arquivo não encontrado:\n{caminho}")
             return None
         try:
-            if pathlib.Path(caminho).suffix.lower() in paginas.EXTENSOES_IMAGEM:
-                with pymupdf.open(caminho) as img:
-                    documento = Documento(dados=img.convert_to_pdf())
+            extensao = pathlib.Path(caminho).suffix.lower()
+            if extensao != ".pdf" and extensao in conversao.EXT_ACEITAS:
+                documento = Documento(
+                    dados=conversao.para_pdf(caminho),
+                    nome=pathlib.Path(caminho).stem + ".pdf")
             else:
                 documento = self._abrir_com_senha(caminho)
                 if documento is None:
@@ -833,6 +875,229 @@ class JanelaPrincipal(QMainWindow):
             f"{pymupdf.mupdf_version if hasattr(pymupdf, 'mupdf_version') else ''}"
             " · Interface: Qt (PySide6)</p>"
             "<p>Licença AGPL-3.0 · © 2026 Ricardo Biazin</p>")
+
+    # -- 0.2: imprimir, converter, lote, comparar, OCR, assinatura --------------------
+    def _progresso(self, titulo: str, total: int) -> tuple:
+        barra = QProgressDialog(titulo, "Cancelar", 0, max(1, total), self)
+        barra.setWindowTitle(NOME)
+        barra.setWindowModality(Qt.WindowModality.WindowModal)
+        barra.setMinimumDuration(300)
+
+        def andamento(feitas: int, total_: int, *_resto) -> bool:
+            barra.setMaximum(max(1, total_))
+            barra.setValue(feitas)
+            QApplication.processEvents()
+            return not barra.wasCanceled()
+        return barra, andamento
+
+    def imprimir(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        from .impressao import imprimir
+        try:
+            n = imprimir(self, a.documento, a.visualizador.pagina_atual)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "Imprimir", str(erro))
+            return
+        if n:
+            self.statusBar().showMessage(f"{n} página(s) enviada(s) para a "
+                                         "impressora.", 6000)
+
+    def converter_para_pdf(self) -> None:
+        arquivos, _ = QFileDialog.getOpenFileNames(
+            self, "Converter para PDF", modulo_aba.pasta_padrao(self.cfg),
+            conversao.FILTRO)
+        if not arquivos:
+            return
+        if len(arquivos) == 1:
+            self.abrir(arquivos[0])
+            return
+        destino = modulo_aba.pedir_destino(
+            self, "Salvar PDF", str(pathlib.Path(arquivos[0]).with_suffix(".pdf")),
+            dialogos.FILTRO_PDF)
+        if not destino:
+            return
+        try:
+            conversao.varios_para_pdf(arquivos, destino)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "Converter", str(erro))
+            return
+        self.abrir(destino)
+
+    def pdf_para_word(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        base = pathlib.Path(a.documento.nome).stem
+        pasta = (a.documento.caminho.parent if a.documento.caminho
+                 else pathlib.Path(modulo_aba.pasta_padrao(self.cfg)))
+        destino = modulo_aba.pedir_destino(self, "PDF para Word",
+                                           str(pasta / f"{base}.docx"),
+                                           "Documento do Word (*.docx)")
+        if not destino:
+            return
+        barra, andamento = self._progresso("Convertendo para Word…",
+                                           a.documento.paginas)
+        try:
+            conversao.para_word(a.documento, destino, andamento)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "PDF para Word", str(erro))
+            return
+        finally:
+            barra.close()
+        self.statusBar().showMessage(
+            f"Salvo: {destino} (tabelas e colunas não são reconstruídas)",
+            8000)
+
+    def processar_lote(self) -> None:
+        d = dialogos_extras.DialogoLote(self, modulo_aba.pasta_padrao(self.cfg))
+        if d.exec() != d.DialogCode.Accepted:
+            return
+        arquivos = d.arquivos()
+        barra, andamento = self._progresso("Processando…", len(arquivos))
+        try:
+            resultados = lote.processar(arquivos, d.saida.text().strip(),
+                                        d.operacoes(), progresso=andamento)
+        except ValueError as erro:
+            modulo_aba.avisar(self, "Lote", str(erro))
+            return
+        finally:
+            barra.close()
+        ok = sum(1 for r in resultados if r.ok)
+        erros = [f"• {r.arquivo.name}: {r.erro}" for r in resultados
+                 if not r.ok]
+        mensagem = f"{ok} de {len(arquivos)} arquivo(s) processado(s) em\n" \
+                   f"{d.saida.text().strip()}"
+        if erros:
+            mensagem += "\n\nCom problema:\n" + "\n".join(erros[:15])
+        QMessageBox.information(self, "Processar em lote", mensagem)
+
+    def comparar_pdfs(self) -> None:
+        a = self._aba()
+        atual = str(a.documento.caminho) if a and a.documento.caminho else ""
+        d = dialogos_extras.DialogoEscolherComparacao(self, atual)
+        if d.exec() != d.DialogCode.Accepted:
+            return
+        from .comparacao import JanelaComparacao
+        try:
+            janela = JanelaComparacao(d.a.text().strip(), d.b.text().strip(),
+                                      self)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "Comparar", str(erro))
+            return
+        janela.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        janela.show()
+
+    def reconhecer_texto(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        d = dialogos_extras.DialogoOCR(self)
+        if d.exec() != d.DialogCode.Accepted:
+            return
+        alvo = ([a.visualizador.pagina_atual] if d.atual.isChecked()
+                else None)
+        total = 1 if alvo else a.documento.paginas
+        barra, andamento = self._progresso("Reconhecendo texto…", total)
+        try:
+            n = a._executar(ocr.reconhecer, a.documento, alvo,
+                            idioma=d.idioma.currentData(),
+                            forcar=d.forcar.isChecked(), progresso=andamento)
+        finally:
+            barra.close()
+        if isinstance(n, int):
+            self.statusBar().showMessage(
+                f"Texto reconhecido em {n} página(s)." if n else
+                "Nenhuma página precisou de OCR (já têm texto).", 8000)
+
+    def assinar_certificado_menu(self) -> None:
+        self.definir_ferramenta(Ferramenta.ASSINAR_CERTIFICADO)
+        self.statusBar().showMessage(
+            "Desenhe na página a área da assinatura (ou clique uma vez para "
+            "uma assinatura invisível).", 10000)
+
+    def assinar_certificado(self, aba: AbaDocumento, pagina: int,
+                            rect) -> None:
+        d = aba.documento
+        if d.modificado or d.caminho is None:
+            if not modulo_aba.confirmar(
+                    self, "Assinar", "O documento precisa estar salvo antes "
+                    "de ser assinado. Salvar agora?"):
+                return
+            if not self.salvar(aba):
+                return
+        cert = modulo_aba.pedir_certificado(
+            self, self.cfg.get("ultimo_certificado", ""), rect is not None)
+        if cert is None:
+            return
+        destino = modulo_aba.pedir_destino(
+            self, "Salvar documento assinado",
+            assinatura_digital.nome_assinado(d.caminho, d.nome),
+            dialogos.FILTRO_PDF)
+        if not destino:
+            return
+        try:
+            # Assina os bytes EXATOS do arquivo em disco, e nao os da memoria.
+            assinado = assinatura_digital.assinar(
+                d.caminho.read_bytes(), cert["pfx"], cert["senha"],
+                pagina=pagina, rect=rect, motivo=cert["motivo"],
+                local=cert["local"])
+            pathlib.Path(destino).write_bytes(assinado)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "Assinar", str(erro))
+            return
+        self.cfg["ultimo_certificado"] = cert["arquivo"]
+        self.definir_ferramenta(Ferramenta.SELECIONAR)
+        self.abrir(destino)
+        self.statusBar().showMessage(f"Documento assinado: {destino}", 8000)
+
+    def verificar_assinaturas(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        d = a.documento
+        # Verifica o ARQUIVO: o documento em memoria pode ter sido editado.
+        dados = (d.caminho.read_bytes() if d.caminho and not d.modificado
+                 else d.doc.tobytes())
+        try:
+            lista = assinatura_digital.verificar(dados)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "Assinaturas", str(erro))
+            return
+        dialogos_extras.DialogoVerificarAssinaturas(lista, self).exec()
+
+    def cabecalho_rodape(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        d = dialogos_extras.DialogoCabecalhoRodape(self)
+        if d.exec() == d.DialogCode.Accepted:
+            a._executar(extras.cabecalho_rodape, a.documento, d.textos(),
+                        tamanho=d.tamanho.value(), cor=d.cor.cor,
+                        pular_primeira=d.pular.isChecked())
+
+    def recortar(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        d = dialogos_extras.DialogoRecortar(self)
+        if d.exec() == d.DialogCode.Accepted:
+            alvo = (range(a.documento.paginas) if d.todas.isChecked()
+                    else a.paginas_alvo())
+            a._executar(paginas.recortar, a.documento, alvo,
+                        margens_mm=d.valores())
+
+    def redimensionar(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        d = dialogos_extras.DialogoRedimensionar(self)
+        if d.exec() == d.DialogCode.Accepted:
+            alvo = None if d.todas.isChecked() else a.paginas_alvo()
+            a._executar(paginas.redimensionar, a.documento,
+                        d.formato.currentText(), alvo,
+                        margem_mm=d.margem.value())
 
     # -- estado -----------------------------------------------------------------------
     def _atualizar_estado(self) -> None:

@@ -33,6 +33,10 @@ class Ferramenta(enum.Enum):
     TARJAR = "tarjar"
     CAMPO_TEXTO = "campo_texto"
     CAIXA_SELECAO = "caixa_selecao"
+    CARIMBO = "carimbo"
+    LINK = "link"
+    RECORTAR = "recortar"
+    ASSINAR_CERTIFICADO = "assinar_certificado"
 
 
 #: (rotulo no menu, dica, gesto, atalho)
@@ -74,6 +78,15 @@ INFO: dict[Ferramenta, tuple[str, str, Gesto, str]] = {
     Ferramenta.CAIXA_SELECAO: ("Caixa de seleção", "Arraste para criar uma "
                                "caixa de seleção de formulário",
                                Gesto.RETANGULO, ""),
+    Ferramenta.CARIMBO: ("Carimbo", "Clique onde o carimbo deve ficar "
+                         "(APROVADO, CÓPIA, PAGO…)", Gesto.CLIQUE, "C"),
+    Ferramenta.LINK: ("Link", "Arraste a área do link (para um site ou "
+                      "para uma página)", Gesto.RETANGULO, ""),
+    Ferramenta.RECORTAR: ("Recortar", "Arraste a área da página que deve "
+                          "ficar", Gesto.RETANGULO, ""),
+    Ferramenta.ASSINAR_CERTIFICADO: (
+        "Assinar com certificado", "Arraste a área da assinatura digital "
+        "(ou clique para uma assinatura invisível)", Gesto.RETANGULO, ""),
 }
 
 

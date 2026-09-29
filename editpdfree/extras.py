@@ -8,6 +8,7 @@ import pathlib
 
 import pymupdf
 
+from . import fontes
 from .documento import Documento
 
 
@@ -23,7 +24,7 @@ def marca_dagua(d: Documento, texto: str, *, tamanho: float = 60,
     if not texto.strip():
         raise ValueError("Informe o texto da marca d’água.")
     alvo = paginas if paginas is not None else range(d.paginas)
-    largura = pymupdf.get_text_length(texto, fontname="helv",
+    largura = fontes.largura(texto, fontname="helv",
                                       fontsize=tamanho)
     with d.operacao("Marca d’água"):
         for i in alvo:
@@ -70,7 +71,7 @@ def numerar(d: Documento, *, formato: str = "{n} / {total}",
         for i in range(d.paginas):
             p = d.doc[i]
             texto = formato.format(n=i + inicio, total=total)
-            largura = pymupdf.get_text_length(texto, fontname="helv",
+            largura = fontes.largura(texto, fontname="helv",
                                               fontsize=tamanho)
             w, h = p.rect.width, p.rect.height
             vertical, horizontal = posicao.split("-")
@@ -132,3 +133,44 @@ def definir_metadados(d: Documento, valores: dict[str, str]) -> None:
         return
     with d.operacao("Propriedades do documento"):
         d.doc.set_metadata(novo)
+
+
+def _preencher_campos(texto: str, n: int, total: int, arquivo: str,
+                      data: str) -> str:
+    return (texto.replace("{n}", str(n)).replace("{total}", str(total))
+            .replace("{arquivo}", arquivo).replace("{data}", data))
+
+
+def cabecalho_rodape(d: Documento, textos: dict[str, str], *,
+                     tamanho: float = 9, cor=(0.25, 0.25, 0.25),
+                     margem: float = 24, pular_primeira: bool = False) -> None:
+    """Textos por posicao (as mesmas chaves de POSICOES). Aceita {n},
+    {total}, {arquivo} e {data} -- troca literal, sem `str.format`, para uma
+    chave digitada errada nao derrubar a operacao inteira."""
+    import datetime
+    textos = {k: v for k, v in textos.items() if v and v.strip()}
+    invalidas = set(textos) - set(POSICOES)
+    if invalidas:
+        raise ValueError(f"posição inválida: {', '.join(sorted(invalidas))}")
+    if not textos:
+        raise ValueError("Informe ao menos um texto de cabeçalho ou rodapé.")
+    hoje = datetime.date.today().strftime("%d/%m/%Y")
+    arquivo = pathlib.Path(d.nome).stem
+    with d.operacao("Cabeçalho e rodapé"):
+        for i in range(d.paginas):
+            if pular_primeira and i == 0:
+                continue
+            p = d.doc[i]
+            w, h = p.rect.width, p.rect.height
+            for posicao, modelo in textos.items():
+                texto = _preencher_campos(modelo, i + 1, d.paginas, arquivo,
+                                          hoje)
+                largura = fontes.largura(texto, fontname="helv",
+                                                  fontsize=tamanho)
+                vertical, horizontal = posicao.split("-")
+                y = h - margem if vertical == "inferior" else margem + tamanho
+                x = {"centro": (w - largura) / 2, "esquerda": margem,
+                     "direita": w - margem - largura}[horizontal]
+                p.insert_text(_girado_para_pdf(p, x, y), texto,
+                              fontsize=tamanho, fontname="helv", color=cor,
+                              rotate=p.rotation)

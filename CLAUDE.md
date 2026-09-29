@@ -42,6 +42,12 @@ meio escrito. Salvar sem alteração é no-op (não mexe na data do arquivo).
 | `aba.py` | `_executar` devolve `FALHOU` (não `None`) quando a operação dá erro: `None` é retorno normal do núcleo. |
 | `aba.py` | Ao fechar a aba, parar os temporizadores e soltar o documento **antes** de fechá-lo; senão um render agendado dispara num PDF fechado. |
 | `miniaturas.py` | `ListMode`, não `IconMode`: no `IconMode` arrastar só muda a posição desenhada, não a ordem das linhas. |
+| `marcadores.py` | Links são lidos **direto dos objetos do PDF**, não por `page.get_links()`: com outro objeto Page da mesma página vivo, o MuPDF devolve a lista de links de antes da última alteração (o link criado "some", embora esteja no arquivo). |
+| `ocr.py` | O pixmap para o OCR tem de ser **RGB**: em tons de cinza o `pdfocr_tobytes` devolve a página sem texto nenhum, sem erro. A imagem da camada de OCR é trocada por 1 pixel (senão o arquivo dobra) e a camada vai **atrás** do conteudo (`overlay=False`). A rotação é zerada durante o processo. |
+| `assinatura_digital.py` | Assinar trabalha sobre os **bytes do arquivo em disco** e grava arquivo novo por atualização incremental — nunca pelo `Documento.salvar`, que reescreve tudo e invalidaria a assinatura. O pyHanko usa y de baixo para cima (`_caixa_pyhanko`). |
+| `EditPDFree.spec` | O **OpenSSL fica** no pacote: o pyHanko importa `ssl`, e sem as DLLs a assinatura morre só no `.exe` ("DLL load failed while importing _ssl"). `tessdata` e `icp_brasil` entram em `datas` e o build aborta se estiverem vazios. |
+| `fontes.py` | `pymupdf.get_text_length` mede errado fora do ASCII ("CÓPIA" media 65 pt em vez de 82). Medir sempre com `fontes.largura`. |
+| `anotacoes.py` | Carimbo é anotação Stamp com imagem; a arte é girada no sentido **contrário** da página (`Annot.set_rotation` não tem efeito em Stamp). |
 | `app.py` | A autoverificação usa `exigir()`, não `assert`: o `.spec` empacota com `optimize=1`, que remove os asserts. |
 | `idioma.py` | Os `QTranslator` ficam em `app._tradutores`; numa variável local o coletor os destrói e os botões voltam ao inglês. O `.spec` inclui os `.qm`. |
 | testes | `drenar_eventos()` e `encerrar()` (zera o modificado antes de fechar). `preparar_qt()` isola `%APPDATA%` para o processo inteiro. |

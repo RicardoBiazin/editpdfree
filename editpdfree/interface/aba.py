@@ -12,16 +12,18 @@ import os
 import pathlib
 
 import pymupdf
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QUrl, Qt, Signal
+from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (QFileDialog, QInputDialog, QMenu, QMessageBox,
-                               QSplitter, QVBoxLayout, QWidget)
+                               QSplitter, QTabWidget, QVBoxLayout, QWidget)
 
-from .. import anotacoes, formularios, paginas, seguranca, texto
+from .. import (anotacoes, formularios, marcadores, paginas, seguranca,
+                texto)
 from ..documento import Documento
 from . import config, dialogos
 from .ferramentas import Ferramenta
 from .miniaturas import Miniaturas
+from .painel_marcadores import PainelMarcadores
 from .visualizador import Visualizador
 
 
@@ -66,6 +68,53 @@ def pedir_assinatura(parent) -> bytes | None:
     return d.png
 
 
+def pedir_carimbo(parent) -> tuple[str, str] | None:
+    """(texto, subtitulo) do carimbo, escolhido num menu no cursor."""
+    import datetime
+    menu = QMenu(parent)
+    hoje = datetime.date.today().strftime("%d/%m/%Y")
+    opcoes = {}
+    for texto_carimbo in anotacoes.CARIMBOS:
+        opcoes[menu.addAction(texto_carimbo)] = (texto_carimbo, "")
+    menu.addSeparator()
+    for texto_carimbo in ("APROVADO", "RECEBIDO", "PAGO"):
+        opcoes[menu.addAction(f"{texto_carimbo} em {hoje}")] = (texto_carimbo,
+                                                               hoje)
+    menu.addSeparator()
+    outro = menu.addAction("Outro texto…")
+    escolhida = menu.exec(QCursor.pos())
+    if escolhida is outro:
+        valor = pedir_texto(parent, "Carimbo", "Texto do carimbo:")
+        return (valor.strip().upper(), "") if valor and valor.strip() else None
+    return opcoes.get(escolhida)
+
+
+def pedir_link(parent, total: int) -> dict | None:
+    from .dialogos_extras import DialogoLink
+    d = DialogoLink(total, parent)
+    if d.exec() != d.DialogCode.Accepted:
+        return None
+    if d.para_url.isChecked():
+        return {"url": d.url.text().strip()}
+    return {"destino": d.pagina.value() - 1}
+
+
+def pedir_certificado(parent, ultimo: str, visivel: bool) -> dict | None:
+    """{pfx, senha, motivo, local, arquivo} ou None."""
+    from .dialogos_extras import DialogoAssinarCertificado
+    d = DialogoAssinarCertificado(parent, ultimo, visivel)
+    if d.exec() != d.DialogCode.Accepted:
+        return None
+    return {"pfx": d.pfx, "senha": d.senha.text(), "motivo": d.motivo.text(),
+            "local": d.local.text(), "arquivo": d.arquivo.text().strip()}
+
+
+def abrir_url(parent, url: str) -> None:
+    # Link de PDF e' dado de terceiro: nunca abre sem o usuario confirmar.
+    if confirmar(parent, "Abrir link", f"Abrir no navegador?\n\n{url}"):
+        QDesktopServices.openUrl(QUrl(url))
+
+
 def avisar(parent, titulo: str, mensagem: str) -> None:
     QMessageBox.warning(parent, titulo, mensagem)
 
@@ -86,6 +135,8 @@ FALHOU = object()
 class AbaDocumento(QWidget):
     estadoMudou = Signal()
     mensagem = Signal(str)
+    #: (pagina, rect ou None) -- a janela conduz o fluxo (salvar, arquivo novo)
+    assinaturaDigitalPedida = Signal(int, object)
 
     def __init__(self, documento: Documento, estilo_fn, parent=None):
         super().__init__(parent)
@@ -93,8 +144,12 @@ class AbaDocumento(QWidget):
         self._estilo = estilo_fn           # callable -> anotacoes.Estilo
         self.visualizador = Visualizador()
         self.miniaturas = Miniaturas()
+        self.marcadores = PainelMarcadores()
+        self.lateral = QTabWidget()
+        self.lateral.addTab(self.miniaturas, "Páginas")
+        self.lateral.addTab(self.marcadores, "Marcadores")
         divisor = QSplitter(Qt.Orientation.Horizontal)
-        divisor.addWidget(self.miniaturas)
+        divisor.addWidget(self.lateral)
         divisor.addWidget(self.visualizador)
         divisor.setStretchFactor(1, 1)
         divisor.setSizes([190, 900])
@@ -109,6 +164,7 @@ class AbaDocumento(QWidget):
         documento.ouvintes.append(self._documento_mudou)
         self.visualizador.definir_documento(documento)
         self.miniaturas.definir_documento(documento)
+        self.marcadores.definir_documento(documento)
 
         v = self.visualizador
         v.paginaAtualMudou.connect(self.miniaturas.marcar_pagina)
@@ -122,6 +178,9 @@ class AbaDocumento(QWidget):
         v.anotacaoExcluir.connect(self._excluir_anotacao)
         v.selecaoFeita.connect(self._selecao)
         v.campoClicado.connect(self._campo)
+        v.linkAcionado.connect(self._link)
+        self.marcadores.paginaEscolhida.connect(v.ir_para_pagina)
+        self.marcadores.acaoPedida.connect(self._acao_marcador)
         m = self.miniaturas
         m.paginaEscolhida.connect(v.ir_para_pagina)
         m.ordemMudou.connect(self._reordenar)
@@ -135,6 +194,7 @@ class AbaDocumento(QWidget):
     def _documento_mudou(self) -> None:
         self.visualizador.recarregar(manter_posicao=True)
         self.miniaturas.recarregar()
+        self.marcadores.recarregar(self.marcadores.indice_atual())
         if self._busca:
             self._buscar_de_novo()
         self.estadoMudou.emit()
@@ -190,6 +250,24 @@ class AbaDocumento(QWidget):
                                arquivo=arquivo)
         elif ferramenta is Ferramenta.TARJAR:
             self._executar(seguranca.tarjar, d, [(pagina, rect)])
+        elif ferramenta is Ferramenta.LINK:
+            if rect.width < 5 or rect.height < 5:
+                self.mensagem.emit("Arraste para marcar a área do link.")
+                return
+            destino = pedir_link(self, d.paginas)
+            if destino:
+                self._executar(marcadores.criar_link, d, pagina, rect,
+                               **destino)
+        elif ferramenta is Ferramenta.RECORTAR:
+            alvo = [pagina]
+            if d.paginas > 1 and confirmar(
+                    self, "Recortar", "Aplicar o mesmo recorte a todas as "
+                    "páginas?"):
+                alvo = list(range(d.paginas))
+            self._executar(paginas.recortar, d, alvo, rect=rect)
+        elif ferramenta is Ferramenta.ASSINAR_CERTIFICADO:
+            pequeno = rect.width < 20 or rect.height < 10
+            self.assinaturaDigitalPedida.emit(pagina, None if pequeno else rect)
         elif ferramenta in (Ferramenta.CAMPO_TEXTO, Ferramenta.CAIXA_SELECAO):
             caixa = ferramenta is Ferramenta.CAIXA_SELECAO
             if rect.width < 5 or rect.height < 5:
@@ -238,6 +316,12 @@ class AbaDocumento(QWidget):
                            tamanho=tamanho, cor=cor)
         elif ferramenta is Ferramenta.ASSINATURA:
             self.colocar_assinatura(pagina, ponto)
+        elif ferramenta is Ferramenta.CARIMBO:
+            escolha = pedir_carimbo(self)
+            if escolha:
+                texto_carimbo, subtitulo = escolha
+                self._executar(anotacoes.carimbo, d, pagina, ponto,
+                               texto_carimbo, subtitulo=subtitulo)
 
     def colocar_assinatura(self, pagina: int, ponto: pymupdf.Point,
                            nova: bool = False) -> None:
@@ -326,6 +410,47 @@ class AbaDocumento(QWidget):
             if valor is None or valor == c.valor:
                 return
         self._executar(formularios.preencher, self.documento, {c.xref: valor})
+
+    def _link(self, pagina: int, link, acao: str) -> None:
+        if acao == "excluir":
+            self._executar(marcadores.excluir_link, self.documento, pagina,
+                           link.rect)
+        elif link.destino_pagina is not None:
+            self.visualizador.ir_para_pagina(link.destino_pagina)
+        elif link.url:
+            abrir_url(self, link.url)
+
+    def _acao_marcador(self, acao: str, indice: int) -> None:
+        d = self.documento
+        if acao == "adicionar":
+            pagina = self.visualizador.pagina_atual
+            titulo = pedir_texto(self, "Novo marcador", "Título:",
+                                 f"Página {pagina + 1}")
+            if titulo:
+                novo = self._executar(marcadores.adicionar, d, titulo, pagina)
+                if isinstance(novo, int):
+                    self.marcadores.recarregar(novo)
+            return
+        if indice < 0:
+            self.mensagem.emit("Selecione um marcador.")
+            return
+        if acao == "renomear":
+            atual = marcadores.ler(d)[indice].titulo
+            titulo = pedir_texto(self, "Renomear marcador", "Título:", atual)
+            if titulo and titulo != atual:
+                self._executar(marcadores.renomear, d, indice, titulo)
+                self.marcadores.recarregar(indice)
+        elif acao == "excluir":
+            self._executar(marcadores.excluir, d, indice)
+        elif acao in ("subir", "descer"):
+            novo = self._executar(marcadores.mover, d, indice,
+                                  -1 if acao == "subir" else 1)
+            if isinstance(novo, int):
+                self.marcadores.recarregar(novo)
+        elif acao in ("recuar", "avancar"):
+            self._executar(marcadores.mudar_nivel, d, indice,
+                           -1 if acao == "recuar" else 1)
+            self.marcadores.recarregar(indice)
 
     # -- paginas -------------------------------------------------------------
     def _reordenar(self, ordem: list[int]) -> None:
@@ -442,6 +567,7 @@ class AbaDocumento(QWidget):
         self.miniaturas._temporizador.stop()
         self.visualizador.documento = None
         self.miniaturas.documento = None
+        self.marcadores.documento = None
         self.documento.fechar()
 
 

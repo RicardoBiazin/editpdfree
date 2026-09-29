@@ -261,6 +261,40 @@ def _desenhar(nome: str, p: QPainter) -> None:
         p.setPen(_caneta(QColor(30, 150, 60), 4))
         p.drawPolyline(QPolygonF([QPointF(15, 24), QPointF(22, 32),
                                   QPointF(34, 15)]))
+    elif nome == "carimbo":
+        p.setPen(_caneta(vermelho, 3))
+        p.drawRoundedRect(QRectF(4, 14, 40, 20), 4, 4)
+        _letra(p, "OK", QRectF(4, 14, 40, 20), tamanho=14, cor=vermelho)
+    elif nome == "link":
+        p.setPen(_caneta(azul, 3.6))
+        p.drawRoundedRect(QRectF(5, 17, 22, 14), 7, 7)
+        p.drawRoundedRect(QRectF(21, 17, 22, 14), 7, 7)
+    elif nome == "recortar":
+        p.setPen(_caneta(largura=3.4))
+        p.drawPolyline(QPolygonF([QPointF(12, 4), QPointF(12, 36),
+                                  QPointF(44, 36)]))
+        p.drawPolyline(QPolygonF([QPointF(4, 12), QPointF(36, 12),
+                                  QPointF(36, 44)]))
+    elif nome == "assinar_certificado":
+        p.setPen(_caneta(azul, 3))
+        path = QPainterPath()
+        path.moveTo(4, 28)
+        path.cubicTo(8, 8, 14, 8, 13, 28)
+        path.cubicTo(13, 34, 20, 16, 24, 26)
+        p.drawPath(path)
+        p.setPen(_caneta(QColor(30, 150, 60), 2.6))
+        p.setBrush(QColor(255, 215, 80))
+        p.drawEllipse(QRectF(26, 18, 18, 18))
+        p.drawLine(QPointF(30, 35), QPointF(28, 45))
+        p.drawLine(QPointF(40, 35), QPointF(42, 45))
+    elif nome == "imprimir":
+        p.setPen(_caneta(largura=2.6))
+        p.setBrush(_cor_fundo())
+        p.drawRect(QRectF(14, 6, 20, 12))
+        p.setBrush(QColor(120, 120, 120))
+        p.drawRoundedRect(QRectF(5, 17, 38, 18), 3, 3)
+        p.setBrush(_cor_fundo())
+        p.drawRect(QRectF(14, 28, 20, 14))
     elif nome == "app":
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(200, 30, 45))

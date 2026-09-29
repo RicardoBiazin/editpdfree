@@ -18,6 +18,27 @@ def exigir(condicao: object, mensagem: str) -> None:
         raise RuntimeError(mensagem)
 
 
+def _certificado_teste() -> bytes:
+    """Certificado autoassinado so' para a autoverificacao."""
+    import datetime
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography.x509.oid import NameOID
+    chave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    nome = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Teste")])
+    agora = datetime.datetime.now(datetime.timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(nome).issuer_name(nome)
+            .public_key(chave.public_key()).serial_number(1)
+            .not_valid_before(agora - datetime.timedelta(days=1))
+            .not_valid_after(agora + datetime.timedelta(days=1))
+            .sign(chave, hashes.SHA256()))
+    return pkcs12.serialize_key_and_certificates(
+        b"t", chave, cert, None,
+        serialization.BestAvailableEncryption(b"1234"))
+
+
 def autoverificacao() -> int:
     """Exercita o pacote de ponta a ponta sem janela visivel.
 
@@ -67,6 +88,44 @@ def autoverificacao() -> int:
             conteudo = conferir[0].get_text()
         exigir("Texto editado com acentuação" in conteudo, conteudo)
         exigir("123.456.789-00" not in conteudo, "tarja nao removeu")
+
+        # Recursos da 0.2: cada um puxa modulos e arquivos de dados que o
+        # PyInstaller pode deixar de fora sem erro no build.
+        from editpdfree import assinatura_digital, conversao, ocr
+        from editpdfree.interface.impressao import imprimir_em
+        from PySide6.QtPrintSupport import QPrinter
+        escaneado = pymupdf.open()
+        pagina = escaneado.new_page()
+        fonte = pymupdf.open()
+        fp = fonte.new_page()
+        fp.insert_text((72, 120), "Reconhecimento de texto", fontsize=18)
+        pagina.insert_image(pagina.rect, pixmap=fp.get_pixmap(dpi=200))
+        d_ocr = Documento(dados=escaneado.tobytes())
+        exigir(ocr.reconhecer(d_ocr, idioma="por") == 1, "ocr nao rodou")
+        exigir("texto" in d_ocr.doc[0].get_text(), "ocr sem texto")
+
+        import docx
+        w = docx.Document()
+        w.add_paragraph("Conversao de Word")
+        arquivo_docx = os.path.join(pasta, "t.docx")
+        w.save(arquivo_docx)
+        with pymupdf.open("pdf", conversao.para_pdf(
+                arquivo_docx, usar_libreoffice=False)) as convertido:
+            exigir("Conversao" in convertido[0].get_text(), "docx")
+        conversao.para_word(d, os.path.join(pasta, "saida.docx"))
+
+        pfx = _certificado_teste()
+        with open(arquivo, "rb") as f:
+            assinado = assinatura_digital.assinar(
+                f.read(), pfx, "1234", rect=pymupdf.Rect(72, 600, 300, 680))
+        verif = assinatura_digital.verificar(assinado)
+        exigir(verif and verif[0].integra, "assinatura digital")
+        exigir(len(assinatura_digital.raizes_icp_brasil()) >= 4, "raizes ICP")
+
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+        printer.setOutputFileName(os.path.join(pasta, "impresso.pdf"))
+        exigir(imprimir_em(printer, d, [0]) == 1, "impressao")
         janela.close()
         return 0
     except Exception:                               # noqa: BLE001

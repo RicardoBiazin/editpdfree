@@ -17,6 +17,7 @@ from typing import Sequence
 
 import pymupdf
 
+from . import fontes
 from .documento import Documento
 
 Cor = tuple[float, float, float]
@@ -251,3 +252,70 @@ def _deslocar_array(valor: str, dx: float, dy: float) -> str:
         return "[" + " ".join(f"{n:.4f}".rstrip("0").rstrip(".")
                               for n in movidos) + "]"
     return re.sub(r"\[([-+0-9.\s]*)\]", pares, valor)
+
+
+# -- carimbos -------------------------------------------------------------------
+CARIMBOS = {
+    "APROVADO": (0.1, 0.55, 0.2),
+    "REPROVADO": (0.8, 0.1, 0.1),
+    "CÓPIA": (0.15, 0.35, 0.75),
+    "CONFIDENCIAL": (0.8, 0.1, 0.1),
+    "RECEBIDO": (0.15, 0.35, 0.75),
+    "PAGO": (0.1, 0.55, 0.2),
+    "URGENTE": (0.85, 0.35, 0.0),
+    "CANCELADO": (0.4, 0.4, 0.4),
+}
+
+
+def _arte_carimbo(texto: str, cor: Cor, subtitulo: str,
+                  rotacao: int) -> tuple[bytes, float, float]:
+    """PNG transparente do carimbo, desenhado em vetor e rasterizado em
+    300 dpi. Devolve (png, largura, altura) em pontos, ja' girados.
+
+    Imagem, e nao texto de anotacao: a FreeText do MuPDF nao aceita borda nem
+    negrito sem rich text, e o rich text ignora cor e tamanho (testado). O
+    carimbo continua sendo uma anotacao -- move e exclui como as outras."""
+    tamanho = 26
+    largura_texto = fontes.largura(texto, fontname="hebo",
+                                            fontsize=tamanho)
+    largura = largura_texto + 36
+    altura = 44 + (14 if subtitulo else 0)
+    arte = pymupdf.open()
+    try:
+        p = arte.new_page(width=largura, height=altura)
+        p.draw_rect(pymupdf.Rect(2.5, 2.5, largura - 2.5, altura - 2.5),
+                    color=cor, width=3, radius=0.12)
+        p.insert_text(((largura - largura_texto) / 2, 34), texto,
+                      fontsize=tamanho, fontname="hebo", color=cor)
+        if subtitulo:
+            ls = fontes.largura(subtitulo, fontname="helv",
+                                         fontsize=10)
+            p.insert_text(((largura - ls) / 2, altura - 10), subtitulo,
+                          fontsize=10, fontname="helv", color=cor)
+        p.set_rotation(rotacao)
+        png = p.get_pixmap(dpi=300, alpha=True).tobytes("png")
+        return png, p.rect.width, p.rect.height
+    finally:
+        arte.close()
+
+
+def carimbo(d: Documento, pagina: int, centro: pymupdf.Point, texto: str, *,
+            cor: Cor | None = None, subtitulo: str = "",
+            escala: float = 1.0) -> None:
+    cor = cor or CARIMBOS.get(texto, (0.8, 0.1, 0.1))
+    p = d.doc[pagina]
+    # A anotacao gira JUNTO com a pagina; para o leitor ve-la de pe', a arte
+    # e' girada no sentido CONTRARIO. `w, h` ja' saem com as dimensoes da
+    # arte girada, que sao as da caixa no espaco PDF (sem rotacao). Conferido
+    # renderizando nas quatro rotacoes; `Annot.set_rotation` nao tem efeito
+    # em carimbo.
+    png, w, h = _arte_carimbo(texto, cor, subtitulo,
+                              (360 - p.rotation) % 360)
+    w, h = w * escala, h * escala
+    rect = pymupdf.Rect(centro.x - w / 2, centro.y - h / 2,
+                        centro.x + w / 2, centro.y + h / 2)
+    with d.operacao(f"Carimbo {texto}"):
+        p = d.doc[pagina]
+        a = p.add_stamp_annot(rect, stamp=png)
+        a.set_info(content=texto + (f" — {subtitulo}" if subtitulo else ""))
+        a.update()

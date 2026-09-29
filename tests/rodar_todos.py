@@ -28,6 +28,10 @@ SUITES = [
     ("teste_seguranca.py", "tarja de verdade e formularios"),
     ("teste_extras.py", "marca d'agua, numeracao, compressao, exportacao"),
     ("teste_interface.py", "janela: abas, gestos do mouse, teclas, busca"),
+    ("teste_assinatura.py", "assinatura digital A1 (PAdES): assinar e validar"),
+    ("teste_ocr_conversao.py", "OCR embutido; DOCX/TXT/imagem -> PDF -> Word"),
+    ("teste_produtividade.py", "lote, comparar, recortar, carimbo, marcadores"),
+    ("teste_interface_recursos.py", "recursos 0.2 pela janela e impressao"),
 ]
 
 

@@ -34,10 +34,14 @@ excludes = [
 # Bibliotecas NATIVAS (excludes age sobre modulos Python). opengl32sw.dll e' o
 # rasterizador de software do Qt; o programa e' Widgets puro. Se em alguma
 # maquina ele nao abrir, o primeiro teste e' tirar essa DLL desta lista.
+#
+# O OpenSSL (libssl/libcrypto) FICA: o pyHanko importa `ssl` ao carregar os
+# modulos de carimbo de tempo, e sem as DLLs a assinatura digital morre com
+# "DLL load failed while importing _ssl" -- so' no .exe. A autoverificacao
+# pegou isso na 0.2.0.
 DLLS_DESNECESSARIAS = [
-    "libcrypto-3-x64.dll", "libssl-3-x64.dll", "libcrypto-3.dll",
-    "libssl-3.dll", "opengl32sw.dll", "Qt6Pdf.dll", "Qt6Quick.dll",
-    "Qt6Qml.dll", "Qt6Network.dll",
+    "opengl32sw.dll", "Qt6Pdf.dll", "Qt6Quick.dll", "Qt6Qml.dll",
+    "Qt6Network.dll",
 ]
 
 # Traducao do Qt para pt-BR ("Salvar"/"Cancelar" nos dialogos padrao). O
@@ -54,6 +58,29 @@ if not _icone.is_file():
     raise SystemExit("[EditPDFree] editpdfree/recursos/icone.ico ausente: "
                      "rode ferramentas\\gerar_icone.py")
 datas.append((str(_icone), "editpdfree/recursos"))
+
+# Idiomas do OCR e raizes ICP-Brasil. Sem eles o .exe abre normalmente e so'
+# falha na hora do OCR ("tessdata not found") ou diz que TODA assinatura
+# ICP-Brasil e' "nao confiavel" -- por isso o empacotamento aborta.
+for _pasta, _padrao in (("editpdfree/recursos/tessdata", "*.traineddata"),
+                        ("editpdfree/recursos/icp_brasil", "*.crt")):
+    _arquivos = sorted(pathlib.Path(_pasta).glob(_padrao))
+    if not _arquivos:
+        raise SystemExit(f"[EditPDFree] {_pasta} vazio: empacotamento abortado.")
+    datas += [(str(a), _pasta) for a in _arquivos]
+    print(f"[EditPDFree] {len(_arquivos)} arquivo(s) de {_pasta}")
+
+# O pyHanko carrega partes por importacao tardia (dentro de funcao) e le
+# arquivos de dados do proprio pacote; o python-docx tem um template .docx
+# interno sem o qual `Document()` falha.
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+datas += collect_data_files("docx")
+datas += collect_data_files("pyhanko")
+datas += collect_data_files("pyhanko_certvalidator")
+hiddenimports = (collect_submodules("pyhanko.sign")
+                 + collect_submodules("pyhanko.stamp")
+                 + collect_submodules("pyhanko_certvalidator")
+                 + ["docx", "tzlocal"])
 datas.append(("LICENSE", "."))
 
 a = Analysis(
@@ -61,7 +88,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=excludes,

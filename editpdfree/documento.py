@@ -33,12 +33,16 @@ class SenhaNecessaria(Exception):
 
 class Documento:
     def __init__(self, caminho: str | os.PathLike | None = None, *,
-                 dados: bytes | None = None, senha: str | None = None):
+                 dados: bytes | None = None, senha: str | None = None,
+                 nome: str | None = None):
         self.caminho: pathlib.Path | None = (
             pathlib.Path(caminho) if caminho else None)
         if dados is None and self.caminho is not None:
             dados = self.caminho.read_bytes()
         self._senha = senha
+        #: Nome sugerido para um documento sem caminho (ex.: um DOCX
+        #: convertido vira "relatorio.pdf").
+        self._nome = nome
         #: Criptografia que o arquivo JA' tinha e que tem de sobreviver ao
         #: salvar. O MuPDF, depois de autenticar, grava o documento SEM
         #: criptografia (PDF_ENCRYPT_KEEP nao adianta num documento
@@ -77,7 +81,9 @@ class Documento:
 
     @property
     def nome(self) -> str:
-        return self.caminho.name if self.caminho else "Sem título.pdf"
+        if self.caminho:
+            return self.caminho.name
+        return self._nome or "Sem título.pdf"
 
     @property
     def paginas(self) -> int:

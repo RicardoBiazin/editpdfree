@@ -184,3 +184,96 @@ def dividir(d: Documento, pasta: str | os.PathLike, *,
                   else f"{grupo[0] + 1}-{grupo[-1] + 1}")
         saidas.append(extrair(d, grupo, pasta / f"{base}_p{rotulo}.pdf"))
     return saidas
+
+
+#: Tamanhos em pontos (retrato).
+FORMATOS = {
+    "A4": (595.28, 841.89),
+    "A3": (841.89, 1190.55),
+    "A5": (419.53, 595.28),
+    "Carta": (612.0, 792.0),
+    "Ofício": (612.0, 1008.0),
+}
+
+MM = 72 / 25.4
+
+
+def recortar(d: Documento, indices: Iterable[int], *,
+             rect: pymupdf.Rect | None = None,
+             margens_mm: tuple[float, float, float, float] | None = None
+             ) -> None:
+    """Recorta as paginas: por um retangulo (espaco PDF, sem rotacao) ou por
+    margens em mm (superior, direita, inferior, esquerda) medidas como o
+    LEITOR ve a pagina.
+
+    Recortar mexe so' na CropBox: o conteudo fora continua no arquivo (e
+    volta com desfazer). Para apagar de verdade o que ficou de fora, use a
+    tarja."""
+    if (rect is None) == (margens_mm is None):
+        raise ValueError("informe rect ou margens_mm")
+    indices = sorted(set(indices))
+    with d.operacao("Recortar páginas"):
+        for i in indices:
+            p = d.doc[i]
+            atual = pymupdf.Rect(p.cropbox)
+            if rect is not None:
+                # `rect` e' relativo ao canto da CropBox atual; set_cropbox
+                # quer coordenadas da MediaBox.
+                novo = pymupdf.Rect(rect) + (atual.x0, atual.y0,
+                                             atual.x0, atual.y0)
+            else:
+                sup, dir_, inf, esq = (m * MM for m in margens_mm)
+                # Margens do ponto de vista do leitor -> lados da pagina sem
+                # rotacao. A 90 graus, o "topo" visivel e' o lado esquerdo.
+                lados = {0: (sup, dir_, inf, esq), 90: (esq, sup, dir_, inf),
+                         180: (inf, esq, sup, dir_),
+                         270: (dir_, inf, esq, sup)}[p.rotation]
+                t, r, b, l = lados
+                novo = pymupdf.Rect(atual.x0 + l, atual.y0 + t,
+                                    atual.x1 - r, atual.y1 - b)
+            novo = novo & p.mediabox
+            if novo.width < 20 or novo.height < 20:
+                raise ValueError("O recorte deixaria a página pequena demais.")
+            p.set_cropbox(novo)
+
+
+def redimensionar(d: Documento, formato: str,
+                  indices: Iterable[int] | None = None, *,
+                  margem_mm: float = 0) -> None:
+    """Coloca cada pagina num novo tamanho de papel, reduzida ou ampliada
+    para caber sem distorcer, e centralizada. A orientacao de cada pagina
+    (retrato/paisagem, como o leitor ve) e' mantida.
+
+    As anotacoes e os campos sao ACHATADOS antes: o conteudo e' copiado como
+    desenho (show_pdf_page), e anotacao nao viaja junto."""
+    if formato not in FORMATOS:
+        raise ValueError(f"formato desconhecido: {formato}")
+    alvo = set(indices) if indices is not None else set(range(d.paginas))
+    largura, altura = FORMATOS[formato]
+    margem = margem_mm * MM
+    with d.operacao(f"Redimensionar para {formato}"):
+        origem = pymupdf.open("pdf", d.doc.tobytes())
+        try:
+            origem.bake(annots=True, widgets=True)
+            novo = pymupdf.open()
+            for i in range(origem.page_count):
+                if i not in alvo:
+                    novo.insert_pdf(d.doc, from_page=i, to_page=i)
+                    continue
+                p = origem[i]
+                paisagem = p.rect.width > p.rect.height
+                w, h = (altura, largura) if paisagem else (largura, altura)
+                pagina = novo.new_page(width=w, height=h)
+                area = pymupdf.Rect(margem, margem, w - margem, h - margem)
+                # show_pdf_page ja' aplica a rotacao da origem e mantem a
+                # proporcao, centralizando dentro de `area`.
+                pagina.show_pdf_page(area, origem, i)
+            novo.set_metadata(d.doc.metadata or {})
+            try:
+                novo.set_toc(d.doc.get_toc(simple=False))
+            except Exception:                       # noqa: BLE001
+                pass          # sumario invalido na origem: segue sem ele
+            antigo, d.doc = d.doc, novo
+            antigo.close()
+        finally:
+            origem.close()
