@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>EditPDFree — editor de PDF gratuito</title>
+  <meta name="description" content="Editor de PDF gratuito e de código aberto que roda no seu navegador. Seus arquivos não saem do seu computador.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#c62828">
+  <link rel="icon" href="/icons/icone.svg" type="image/svg+xml">
+  <link rel="icon" href="/icons/icone-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body>
+  <noscript><p class="sem-js">O EditPDFree precisa de JavaScript ativado: todo o trabalho com o PDF acontece no seu navegador.</p></noscript>
+
+  <header class="barra" id="barra">
+    <div class="barra-linha">
+      <a class="marca" href="./" aria-label="EditPDFree — início"><img src="/icons/icone.svg" alt="" width="28" height="28"><span>EditPDFree</span></a>
+      <button class="bt" id="btLateral" data-icone="lateral" title="Mostrar/ocultar miniaturas" aria-label="Mostrar ou ocultar miniaturas" disabled></button>
+      <button class="bt" id="btAbrir" data-icone="abrir" title="Abrir (Ctrl+O)"><span class="rotulo">Abrir</span></button>
+      <button class="bt" id="btSalvar" data-icone="salvar" title="Salvar (Ctrl+S)" disabled><span class="rotulo">Salvar</span></button>
+      <span class="sep"></span>
+      <button class="bt" id="btDesfazer" data-icone="desfazer" title="Desfazer (Ctrl+Z)" aria-label="Desfazer" disabled></button>
+      <button class="bt" id="btRefazer" data-icone="refazer" title="Refazer (Ctrl+Y)" aria-label="Refazer" disabled></button>
+      <span class="sep"></span>
+      <div class="grupo-zoom">
+        <button class="bt" id="btZoomMenos" data-icone="menos" title="Diminuir zoom (Ctrl + −)" aria-label="Diminuir zoom" disabled></button>
+        <button class="bt texto-zoom" id="btZoom" title="Zoom: clique para ajustar à largura" disabled>100%</button>
+        <button class="bt" id="btZoomMais" data-icone="mais" title="Aumentar zoom (Ctrl + +)" aria-label="Aumentar zoom" disabled></button>
+        <button class="bt" id="btLargura" data-icone="largura" title="Ajustar à largura" aria-label="Ajustar à largura" disabled></button>
+      </div>
+      <div class="indicador" title="Página atual">
+        <label class="oculto-visual" for="inPagina">Página</label>
+        <input id="inPagina" type="text" inputmode="numeric" value="" disabled aria-label="Página atual">
+        <span id="totalPaginas">/ 0</span>
+      </div>
+      <span class="sep"></span>
+      <button class="bt" id="btBuscar" data-icone="buscar" title="Localizar (Ctrl+F)" aria-label="Localizar" disabled></button>
+      <details class="menu" id="menuPaginas">
+        <summary class="bt" data-icone="pagina"><span class="rotulo">Páginas</span></summary>
+        <div class="menu-itens" role="menu">
+          <button data-acao="girarE" data-icone="girarE" role="menuitem">Girar à esquerda</button>
+          <button data-acao="girarD" data-icone="girarD" role="menuitem">Girar à direita</button>
+          <button data-acao="duplicar" data-icone="duplicar" role="menuitem">Duplicar</button>
+          <button data-acao="excluir" data-icone="lixeira" role="menuitem">Excluir</button>
+          <hr>
+          <button data-acao="branco" data-icone="paginaMais" role="menuitem">Inserir página em branco</button>
+          <button data-acao="inserirArquivo" data-icone="abrir" role="menuitem">Inserir PDF ou imagem…</button>
+          <hr>
+          <button data-acao="extrair" data-icone="salvar" role="menuitem">Extrair páginas…</button>
+          <button data-acao="dividir" data-icone="duplicar" role="menuitem">Dividir documento…</button>
+        </div>
+      </details>
+      <details class="menu" id="menuDocumento">
+        <summary class="bt" data-icone="menu"><span class="rotulo">Documento</span></summary>
+        <div class="menu-itens" role="menu">
+          <button data-acao="buscar" data-icone="buscar" role="menuitem">Localizar…</button>
+          <button data-acao="tarjarTexto" data-icone="tarjar" role="menuitem">Tarjar todas as ocorrências de um texto…</button>
+          <hr>
+          <button data-acao="marcaDagua" data-icone="texto" role="menuitem">Marca d’água…</button>
+          <button data-acao="numerar" data-icone="pagina" role="menuitem">Numerar páginas…</button>
+          <hr>
+          <button data-acao="proteger" data-icone="cadeado" role="menuitem">Proteger com senha…</button>
+          <button data-acao="removerSenha" data-icone="cadeado" role="menuitem">Remover senha</button>
+          <hr>
+          <button data-acao="extrairTexto" data-icone="texto" role="menuitem">Extrair texto (.txt)</button>
+          <button data-acao="sobre" data-icone="info" role="menuitem">Sobre o EditPDFree</button>
+        </div>
+      </details>
+      <span class="ocupado" id="ocupado" hidden aria-label="Trabalhando…"></span>
+    </div>
+
+    <div class="barra-linha ferramentas" id="ferramentas" role="toolbar" aria-label="Ferramentas" hidden>
+      <div class="grupo-ferramentas" id="grupoFerramentas"></div>
+      <div class="estilo" id="estilo">
+        <label title="Cor"><span class="oculto-visual">Cor</span><input type="color" id="inCor" value="#d81b1b"></label>
+        <label title="Espessura do traço"><span class="rotulo-mini">Traço</span><input type="range" id="inEspessura" min="1" max="12" step="0.5" value="2"></label>
+        <label title="Opacidade"><span class="rotulo-mini">Opac.</span><input type="range" id="inOpacidade" min="10" max="100" step="5" value="100"></label>
+        <label title="Tamanho da fonte"><span class="rotulo-mini">Fonte</span><input type="number" id="inFonte" min="6" max="96" value="12"></label>
+      </div>
+    </div>
+
+    <div class="barra-linha busca" id="busca" hidden>
+      <label class="oculto-visual" for="inBusca">Localizar</label>
+      <input id="inBusca" type="search" placeholder="Localizar no documento…" autocomplete="off">
+      <span id="contagemBusca" class="contagem"></span>
+      <button class="bt" id="btBuscaAnterior" data-icone="acima" title="Anterior (Shift+Enter)" aria-label="Resultado anterior"></button>
+      <button class="bt" id="btBuscaProxima" data-icone="abaixo" title="Próximo (Enter)" aria-label="Próximo resultado"></button>
+      <button class="bt" id="btBuscaFechar" data-icone="fechar" title="Fechar (Esc)" aria-label="Fechar a busca"></button>
+    </div>
+  </header>
+
+  <main class="area" id="area">
+    <aside class="lateral" id="lateral" aria-label="Miniaturas das páginas" hidden>
+      <div class="lateral-lista" id="miniaturas"></div>
+    </aside>
+    <section class="visor" id="visor" tabindex="-1" aria-label="Documento">
+      <div class="paginas" id="paginas"></div>
+      <div class="boas-vindas" id="boasVindas">
+        <img src="/icons/icone.svg" alt="" width="88" height="88">
+        <h1>EditPDFree</h1>
+        <p class="sub">Editor de PDF gratuito e de código aberto, direto no navegador.</p>
+        <button class="primario grande" id="btAbrirGrande">Abrir PDF</button>
+        <p class="dica">ou arraste um PDF (ou uma imagem) para cá</p>
+        <ul class="recursos">
+          <li>Girar, excluir, reordenar, juntar, extrair e dividir páginas</li>
+          <li>Caixa de texto, nota, destaque, caneta, formas e assinatura</li>
+          <li>Tarja de verdade: o texto some do arquivo, não fica escondido</li>
+          <li>Preencher formulários, editar texto, marca d’água, senha</li>
+        </ul>
+        <p class="privacidade"><strong>Seus arquivos não saem do seu computador.</strong> Todo o trabalho acontece aqui, no seu navegador; nada é enviado para servidor nenhum.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape" id="rodape">
+    <span>Seus arquivos não saem do seu computador.</span>
+    <span>Software livre sob a licença <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noopener" target="_blank">AGPL-3.0</a> · <a href="https://github.com/RicardoBiazin/editpdfree" rel="noopener" target="_blank">código-fonte</a></span>
+  </footer>
+
+  <input type="file" id="arquivo" accept="application/pdf,.pdf,image/*" hidden>
+  <input type="file" id="arquivoInserir" accept="application/pdf,.pdf,image/*" multiple hidden>
+  <input type="file" id="arquivoImagem" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+  <div class="soltar" id="soltar" hidden><div>Solte o arquivo para abrir</div></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

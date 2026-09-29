@@ -55,6 +55,10 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 
 Desfazer/refazer (Ctrl+Z / Ctrl+Y) vale para todas as operações. Arraste PDFs para a janela para abri-los.
 
+## Versão web
+
+Também dá para usar no navegador, sem instalar: **https://editpdfree.netlify.app** — o PDF é processado no seu computador e nunca é enviado a servidor nenhum. Código em [`web/`](web/).
+
 ## Instalar
 
 Baixe o ZIP da [última versão](https://github.com/RicardoBiazin/editpdfree/releases/latest), extraia e execute `EditPDFree\EditPDFree.exe`. Não precisa instalar nada.

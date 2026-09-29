@@ -1,0 +1,25 @@
+{
+  "name": "editpdfree-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "EditPDFree para navegador: editor de PDF gratuito que roda inteiro no navegador (MuPDF.js/WASM).",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/icones.mjs && vite build",
+    "preview": "vite preview",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "fumaca": "node scripts/fumaca.mjs",
+    "fumaca:portao": "node scripts/fumaca.mjs --portao",
+    "portao:local": "node scripts/servidor-portao.mjs"
+  },
+  "dependencies": {
+    "mupdf": "1.28.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.1"
+  }
+}

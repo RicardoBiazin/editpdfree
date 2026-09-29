@@ -1,0 +1,46 @@
+// Icones em SVG (traco, 24x24), desenhados aqui mesmo -- nada vem de fora.
+
+const P: Record<string, string> = {
+  abrir: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H7.5a2 2 0 0 0-1.9 1.4L3 19z"/><path d="M3 19l2.6-7.6A2 2 0 0 1 7.5 10H22l-2.8 8.1a2 2 0 0 1-1.9 1.4H3z"/>',
+  salvar: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+  desfazer: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  refazer: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>',
+  menos: '<circle cx="11" cy="11" r="7"/><path d="M8 11h6M21 21l-5-5"/>',
+  mais: '<circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M21 21l-5-5"/>',
+  largura: '<path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/><path d="M4 4v16M20 4v16"/>',
+  buscar: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/>',
+  lateral: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  selecionar: '<path d="M5 3l14 8-6 1.5L10 19z"/>',
+  caixaTexto: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9h8M12 9v7"/>',
+  nota: '<path d="M4 4h16v12H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+  destacar: '<path d="M9 11l6-6 4 4-6 6"/><path d="M9 11l-4 4v3h3l4-4"/><path d="M3 21h18"/>',
+  sublinhar: '<path d="M7 4v6a5 5 0 0 0 10 0V4"/><path d="M5 20h14"/>',
+  tachar: '<path d="M16 6a4 3 0 0 0-8 1c0 4 8 3 8 7a4 3 0 0 1-8 1"/><path d="M4 12h16"/>',
+  caneta: '<path d="M4 20c4 0 4-6 8-6s3 4 6 4"/><path d="M15 3l4 4-7 7-4 1 1-4z"/>',
+  retangulo: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
+  elipse: '<ellipse cx="12" cy="12" rx="9" ry="6"/>',
+  linha: '<path d="M5 19L19 5"/>',
+  seta: '<path d="M5 19L19 5"/><path d="M10 5h9v9"/>',
+  assinatura: '<path d="M3 17c3-6 5-9 7-9 3 0-2 9 1 9 2 0 3-4 5-4 1 0 1 2 2 2h3"/><path d="M3 21h18"/>',
+  imagem: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
+  texto: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
+  editarTexto: '<path d="M4 7V5h10v2M9 5v12M7 17h4"/><path d="M14 20l1-3 5-5 2 2-5 5z"/>',
+  tarjar: '<rect x="3" y="9" width="18" height="6" rx="1" fill="currentColor"/><path d="M3 5h10M3 19h14"/>',
+  girarE: '<path d="M4 4v5h5"/><path d="M4.6 9A8 8 0 1 1 6 17"/>',
+  girarD: '<path d="M20 4v5h-5"/><path d="M19.4 9A8 8 0 1 0 18 17"/>',
+  lixeira: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  duplicar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  pagina: '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/>',
+  paginaMais: '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M12.5 11v6M9.5 14h6"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  fechar: '<path d="M6 6l12 12M18 6L6 18"/>',
+  acima: '<path d="M6 15l6-6 6 6"/>',
+  abaixo: '<path d="M6 9l6 6 6-6"/>',
+  cadeado: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+};
+
+export function icone(nome: string, extra = ""): string {
+  const d = P[nome] ?? P.pagina;
+  return `<svg class="ic${extra ? " " + extra : ""}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
