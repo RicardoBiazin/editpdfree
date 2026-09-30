@@ -122,6 +122,15 @@ def adquirir_digitalizacao() -> bytes | None:
     return digitalizar.adquirir_pagina()
 
 
+def pedir_juntar(parent, pasta: str, abertos) -> tuple[list, bool] | None:
+    """(fontes na ordem escolhida, criar marcadores?) ou None."""
+    from .dialogo_juntar import DialogoJuntar
+    d = DialogoJuntar(parent, pasta, abertos)
+    if d.exec() != d.DialogCode.Accepted:
+        return None
+    return d.fontes(), d.marcadores.isChecked()
+
+
 def abrir_url(parent, url: str) -> None:
     # Link de PDF e' dado de terceiro: nunca abre sem o usuario confirmar.
     if confirmar(parent, "Abrir link", f"Abrir no navegador?\n\n{url}"):

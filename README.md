@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.4.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.5.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
@@ -10,7 +10,7 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 - Girar, excluir, duplicar, mover e reordenar (arrastando as miniaturas)
 - Inserir página em branco, outro PDF ou uma imagem como página
 - Extrair páginas para um novo PDF, dividir o documento (a cada N páginas ou por intervalos como `1-3, 5, 8-`)
-- Juntar vários PDFs e imagens num só
+- Juntar vários PDFs, imagens e documentos do Office num só, **escolhendo a ordem**: miniatura de cada arquivo, arrastar para reordenar (ou soltar arquivos do Explorer), ordenar por nome ou data, inverter, escolher as páginas de cada arquivo e criar um marcador por arquivo; inclui as abas já abertas
 
 **Texto**
 - **Editar o texto que já está no PDF**: clique numa linha, altere o texto, o tamanho e a cor

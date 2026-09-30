@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox,
 from .. import (NOME, VERSAO, anotacoes, assinatura_digital, conversao,
                 conversao_saida, digitalizar, extras, formularios, lote, ocr,
                 paginas, pdfa, reparar, seguranca, texto)
+from .. import juntar as juntar_mod
 from ..documento import Documento, SenhaNecessaria
 from . import aba as modulo_aba
 from . import atalhos, config, dialogos, dialogos_extras, icones
@@ -777,21 +778,27 @@ class JanelaPrincipal(QMainWindow):
                 f"{len(saidas)} arquivo(s) criado(s) em {pasta}", 8000)
 
     def juntar(self) -> None:
-        d = dialogos.DialogoJuntar(self, modulo_aba.pasta_padrao(self.cfg))
-        if d.exec() != d.DialogCode.Accepted:
+        """Juntar varios arquivos na ordem escolhida. O resultado abre numa
+        aba nova, ainda nao salvo ("juntado.pdf"): da' para conferir, editar
+        e so' entao escolher onde gravar."""
+        abertos = [(a.documento.nome, a.documento.doc)
+                   for a in self.todas_as_abas()]
+        escolha = modulo_aba.pedir_juntar(
+            self, modulo_aba.pasta_padrao(self.cfg), abertos)
+        if not escolha:
             return
-        destino = modulo_aba.pedir_destino(
-            self, "Salvar PDF juntado",
-            str(pathlib.Path(modulo_aba.pasta_padrao(self.cfg)) / "juntado.pdf"),
-            dialogos.FILTRO_PDF)
-        if not destino:
-            return
+        fontes, marcadores = escolha
         try:
-            paginas.juntar(d.arquivos(), destino)
+            dados = juntar_mod.juntar(fontes, marcadores=marcadores)
         except Exception as erro:                   # noqa: BLE001
             modulo_aba.avisar(self, "Juntar PDFs", str(erro))
             return
-        self.abrir(destino)
+        documento = Documento(dados=dados, nome="juntado.pdf")
+        documento.modificado = True
+        self._adicionar_aba(documento)
+        self.statusBar().showMessage(
+            f"{len(fontes)} arquivo(s) juntado(s): {documento.paginas} "
+            "página(s). Salve para gravar.", 8000)
 
     # -- documento --------------------------------------------------------------------
     def formulario(self) -> None:

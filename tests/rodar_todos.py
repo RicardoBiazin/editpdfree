@@ -35,6 +35,7 @@ SUITES = [
     ("teste_ferramentas_03.py", "reparar, PPTX/XLSX/MD, imagens, PDF/A, campos"),
     ("teste_interface_03.py", "recursos 0.3 pela janela, scanner simulado"),
     ("teste_atalhos.py", "barra de atalhos personalizavel"),
+    ("teste_juntar.py", "juntar PDFs escolhendo a ordem"),
 ]
 
 

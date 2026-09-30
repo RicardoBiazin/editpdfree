@@ -5,8 +5,8 @@
 # relatorio de bug impossivel de reproduzir.
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 4, 0, 0),
-    prodvers=(0, 4, 0, 0),
+    filevers=(0, 5, 0, 0),
+    prodvers=(0, 5, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -21,12 +21,12 @@ VSVersionInfo(
         '041604b0',
         [StringStruct('CompanyName', 'Ricardo Biazin'),
          StringStruct('FileDescription', 'EditPDFree - editor de PDF gratuito'),
-         StringStruct('FileVersion', '0.4.0'),
+         StringStruct('FileVersion', '0.5.0'),
          StringStruct('InternalName', 'EditPDFree'),
          StringStruct('LegalCopyright', 'Copyright (c) 2026 Ricardo Biazin. Licenca AGPL-3.0.'),
          StringStruct('OriginalFilename', 'EditPDFree.exe'),
          StringStruct('ProductName', 'EditPDFree'),
-         StringStruct('ProductVersion', '0.4.0')])
+         StringStruct('ProductVersion', '0.5.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [0x0416, 1200])])
   ]

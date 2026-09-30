@@ -60,63 +60,6 @@ class BotaoCor(QPushButton):
             self.definir(cor_pdf(c))
 
 
-# -- juntar -------------------------------------------------------------------
-class DialogoJuntar(QDialog):
-    def __init__(self, parent=None, pasta: str = ""):
-        super().__init__(parent)
-        self.setWindowTitle("Juntar PDFs")
-        self.resize(560, 380)
-        self._pasta = pasta
-        self.lista = QListWidget()
-        self.lista.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        botoes = QVBoxLayout()
-        for rotulo, funcao in (("Adicionar…", self._adicionar),
-                               ("Remover", self._remover),
-                               ("Subir", lambda: self._mover(-1)),
-                               ("Descer", lambda: self._mover(1))):
-            b = QPushButton(rotulo)
-            b.clicked.connect(funcao)
-            botoes.addWidget(b)
-        botoes.addStretch()
-        meio = QHBoxLayout()
-        meio.addWidget(self.lista)
-        meio.addLayout(botoes)
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Arquivos na ordem em que serão juntados "
-                                "(arraste para reordenar). Imagens viram "
-                                "páginas."))
-        layout.addLayout(meio)
-        layout.addWidget(_botoes(self, "Juntar…"))
-
-    def _adicionar(self) -> None:
-        arquivos, _ = QFileDialog.getOpenFileNames(
-            self, "Adicionar arquivos", self._pasta, FILTRO_ENTRADA)
-        self.lista.addItems(arquivos)
-
-    def _remover(self) -> None:
-        for item in self.lista.selectedItems():
-            self.lista.takeItem(self.lista.row(item))
-
-    def _mover(self, passo: int) -> None:
-        linha = self.lista.currentRow()
-        nova = linha + passo
-        if linha < 0 or not (0 <= nova < self.lista.count()):
-            return
-        item = self.lista.takeItem(linha)
-        self.lista.insertItem(nova, item)
-        self.lista.setCurrentRow(nova)
-
-    def arquivos(self) -> list[str]:
-        return [self.lista.item(i).text() for i in range(self.lista.count())]
-
-    def accept(self) -> None:
-        if self.lista.count() < 2:
-            QMessageBox.warning(self, "Juntar PDFs",
-                                "Adicione pelo menos dois arquivos.")
-            return
-        super().accept()
-
-
 # -- dividir ------------------------------------------------------------------
 class DialogoDividir(QDialog):
     def __init__(self, total: int, parent=None):
