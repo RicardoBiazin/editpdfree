@@ -174,3 +174,56 @@ def cabecalho_rodape(d: Documento, textos: dict[str, str], *,
                 p.insert_text(_girado_para_pdf(p, x, y), texto,
                               fontsize=tamanho, fontname="helv", color=cor,
                               rotate=p.rotation)
+
+
+
+def marca_dagua_imagem(d: Documento, imagem: bytes, *, opacidade: float = 0.25,
+                       escala: float = 0.5, lado_a_lado: bool = False,
+                       atras: bool = False,
+                       paginas: list[int] | None = None) -> None:
+    """Imagem translucida em cada pagina: centralizada (ocupando `escala` da
+    menor dimensao da pagina) ou repetida lado a lado.
+
+    A opacidade vai para o canal alfa da propria imagem -- o `insert_image`
+    nao tem parametro de opacidade. Com `atras`, a imagem fica por baixo do
+    conteudo (so' aparece onde a pagina e' transparente, ou seja, em PDF
+    gerado por texto; num escaneado ela some atras da foto da pagina)."""
+    if not 0 < opacidade <= 1:
+        raise ValueError("Opacidade entre 1% e 100%.")
+    pix = pymupdf.Pixmap(imagem)
+    if pix.n - pix.alpha >= 4:
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+    if not pix.alpha:
+        pix = pymupdf.Pixmap(pix, 1)
+    alfa = bytearray(pix.samples_mv[pix.n - 1::pix.n])
+    fator = opacidade
+    pix.set_alpha(bytes(int(a * fator) for a in alfa))
+    png = pix.tobytes("png")
+    proporcao = pix.width / pix.height
+    alvo = paginas if paginas is not None else range(d.paginas)
+    with d.operacao("Marca d’água de imagem"):
+        for i in alvo:
+            p = d.doc[i]
+            w, h = p.rect.width, p.rect.height          # como o leitor ve
+            lado = min(w, h) * escala
+            iw, ih = (lado, lado / proporcao) if proporcao >= 1 \
+                else (lado * proporcao, lado)
+            if lado_a_lado:
+                posicoes = [(x, y) for y in _passos(h, ih) for x in _passos(w, iw)]
+            else:
+                posicoes = [((w - iw) / 2, (h - ih) / 2)]
+            for x, y in posicoes:
+                r = pymupdf.Rect(x, y, x + iw, y + ih) * p.derotation_matrix
+                r.normalize()
+                p.insert_image(r, stream=png, keep_proportion=True,
+                               overlay=not atras, rotate=p.rotation)
+
+
+def _passos(total: float, tamanho: float) -> list[float]:
+    """Posicoes para repetir `tamanho` ao longo de `total`, com meio tamanho
+    de espaco entre as copias e o conjunto centralizado."""
+    passo = tamanho * 1.5
+    n = max(1, int((total + tamanho * 0.5) // passo))
+    usado = n * passo - tamanho * 0.5
+    inicio = (total - usado) / 2
+    return [inicio + k * passo for k in range(n)]

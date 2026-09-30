@@ -122,6 +122,20 @@ def autoverificacao() -> int:
         exigir(verif and verif[0].integra, "assinatura digital")
         exigir(len(assinatura_digital.raizes_icp_brasil()) >= 4, "raizes ICP")
 
+        # 0.3: PowerPoint, Excel, Markdown, PDF/A (Pillow/ImageCms), reparar.
+        from editpdfree import conversao_saida, pdfa, reparar
+        conversao_saida.para_powerpoint(d, os.path.join(pasta, "s.pptx"),
+                                        dpi=40)
+        conversao_saida.para_excel(d, os.path.join(pasta, "s.xlsx"))
+        exigir("acentua" in conversao_saida.para_markdown(d), "markdown")
+        d_pdfa = Documento(dados=d.doc.tobytes())
+        pdfa.para_pdfa(d_pdfa)
+        exigir("pdfaid" in d_pdfa.doc.get_xml_metadata(), "pdf/a")
+        with open(arquivo, "rb") as f:
+            _dados, rel = reparar.reparar(f.read())
+        exigir(rel.paginas == 1, "reparar")
+        import comtypes          # noqa: F401  (scanner: so' importar)
+
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
         printer.setOutputFileName(os.path.join(pasta, "impresso.pdf"))

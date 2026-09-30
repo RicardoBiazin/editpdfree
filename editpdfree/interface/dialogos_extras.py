@@ -295,6 +295,7 @@ class DialogoLote(QDialog):
         self.rodape = QCheckBox("Rodapé:")
         self.rodape_texto = QLineEdit("{arquivo} — {data}")
         self.comprimir = QCheckBox("Comprimir imagens")
+        self.pdfa = QCheckBox("Converter para PDF/A (arquivamento)")
         self.senha = QCheckBox("Proteger com senha:")
         self.senha_texto = QLineEdit()
         self.senha_texto.setEchoMode(QLineEdit.EchoMode.Password)
@@ -305,6 +306,7 @@ class DialogoLote(QDialog):
         ops.addRow(self.numerar, self.numerar_formato)
         ops.addRow(self.rodape, self.rodape_texto)
         ops.addRow(self.comprimir)
+        ops.addRow(self.pdfa)
         ops.addRow(self.senha, self.senha_texto)
 
         self.saida = QLineEdit()
@@ -321,7 +323,8 @@ class DialogoLote(QDialog):
         layout.addWidget(QLabel("Operações (aplicadas na ordem abaixo):"))
         layout.addLayout(ops)
         layout.addWidget(QLabel("Pasta de saída (os originais não são "
-                                "alterados):"))
+                                "alterados; arquivos danificados saem "
+                                "reparados):"))
         layout.addLayout(linha_saida)
         layout.addWidget(_botoes(self, "Processar"))
 
@@ -365,6 +368,8 @@ class DialogoLote(QDialog):
                 {"inferior-esquerda": self.rodape_texto.text()}))
         if self.comprimir.isChecked():
             ops.append(lote.op_comprimir())
+        if self.pdfa.isChecked():
+            ops.append(lote.op_pdfa())
         if self.senha.isChecked():
             ops.append(lote.op_proteger(self.senha_texto.text()))
         return ops
@@ -417,3 +422,93 @@ class DialogoEscolherComparacao(QDialog):
                                     "Escolha os dois arquivos.")
                 return
         super().accept()
+
+
+
+# -- 0.3 ----------------------------------------------------------------------------
+class DialogoMarcaImagem(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from .dialogos import FILTRO_IMAGEM
+        self._filtro = FILTRO_IMAGEM
+        self.setWindowTitle("Marca d’água de imagem")
+        self.resize(520, 0)
+        self.arquivo = QLineEdit()
+        procurar = QPushButton("Procurar…")
+        procurar.clicked.connect(self._procurar)
+        linha = QHBoxLayout()
+        linha.addWidget(self.arquivo)
+        linha.addWidget(procurar)
+        self.opacidade = QSpinBox()
+        self.opacidade.setRange(1, 100)
+        self.opacidade.setValue(25)
+        self.opacidade.setSuffix(" %")
+        self.escala = QSpinBox()
+        self.escala.setRange(5, 100)
+        self.escala.setValue(50)
+        self.escala.setSuffix(" % da página")
+        self.lado_a_lado = QCheckBox("Repetir lado a lado")
+        self.atras = QCheckBox("Atrás do conteúdo")
+        form = QFormLayout(self)
+        form.addRow("Imagem:", linha)
+        form.addRow("Opacidade:", self.opacidade)
+        form.addRow("Tamanho:", self.escala)
+        form.addRow("", self.lado_a_lado)
+        form.addRow("", self.atras)
+        form.addRow(_botoes(self, "Aplicar"))
+
+    def _procurar(self) -> None:
+        arquivo, _ = QFileDialog.getOpenFileName(self, "Imagem", "",
+                                                 self._filtro)
+        if arquivo:
+            self.arquivo.setText(arquivo)
+
+    def accept(self) -> None:
+        if not pathlib.Path(self.arquivo.text().strip()).is_file():
+            QMessageBox.warning(self, "Marca d’água", "Escolha a imagem.")
+            return
+        super().accept()
+
+
+class DialogoCamposDetectados(QDialog):
+    """Lista as sugestoes com caixa de marcar: o usuario escolhe quais criar
+    e pode renomear."""
+
+    def __init__(self, sugestoes, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Campos detectados")
+        self.resize(620, 420)
+        self.sugestoes = sugestoes
+        self.tabela = QTableWidget(len(sugestoes), 4)
+        self.tabela.setHorizontalHeaderLabels(["Criar", "Página", "Tipo",
+                                               "Nome"])
+        self.marcas: list[QCheckBox] = []
+        for linha, s in enumerate(sugestoes):
+            marca = QCheckBox()
+            marca.setChecked(True)
+            self.marcas.append(marca)
+            self.tabela.setCellWidget(linha, 0, marca)
+            for coluna, texto in ((1, str(s.pagina + 1)),
+                                  (2, "Caixa de seleção" if s.tipo == "caixa"
+                                   else "Texto")):
+                item = QTableWidgetItem(texto)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                item.setToolTip(s.motivo)
+                self.tabela.setItem(linha, coluna, item)
+            self.tabela.setItem(linha, 3, QTableWidgetItem(s.nome))
+        self.tabela.horizontalHeader().setStretchLastSection(True)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(f"{len(sugestoes)} campo(s) encontrado(s). "
+                                "Desmarque os que não quiser e ajuste os "
+                                "nomes."))
+        layout.addWidget(self.tabela)
+        layout.addWidget(_botoes(self, "Criar campos"))
+
+    def escolhidas(self):
+        saida = []
+        for linha, (s, marca) in enumerate(zip(self.sugestoes, self.marcas)):
+            if marca.isChecked():
+                nome = self.tabela.item(linha, 3).text().strip() or s.nome
+                s.nome = nome
+                saida.append(s)
+        return saida

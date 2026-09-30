@@ -14,7 +14,8 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox,
                                QTabWidget, QToolBar)
 
 from .. import (NOME, VERSAO, anotacoes, assinatura_digital, conversao,
-                extras, formularios, lote, ocr, paginas, seguranca, texto)
+                conversao_saida, digitalizar, extras, formularios, lote, ocr,
+                paginas, pdfa, reparar, seguranca, texto)
 from ..documento import Documento, SenhaNecessaria
 from . import aba as modulo_aba
 from . import config, dialogos, dialogos_extras, icones
@@ -96,6 +97,18 @@ class JanelaPrincipal(QMainWindow):
         self.a_cabecalho = a("Cabeçalho e &rodapé…", self.cabecalho_rodape)
         self.a_recortar = a("Recor&tar páginas…", self.recortar)
         self.a_redimensionar = a("Redimensionar pá&ginas…", self.redimensionar)
+        self.a_para_pptx = a("PDF para PowerPoint (.pptx)…", self.pdf_para_pptx)
+        self.a_para_xlsx = a("PDF para Excel (.xlsx) — tabelas…",
+                             self.pdf_para_xlsx)
+        self.a_para_md = a("PDF para Markdown (.md)…", self.pdf_para_md)
+        self.a_extrair_imagens = a("Extrair todas as imagens…",
+                                   self.extrair_imagens)
+        self.a_reparar = a("Reparar PDF danificado…", self.reparar_pdf)
+        self.a_pdfa = a("Converter para PDF/&A…", self.converter_pdfa)
+        self.a_marca_imagem = a("Marca d’água de &imagem…", self.marca_imagem)
+        self.a_detectar = a("Detectar campos de formulário…",
+                            self.detectar_campos)
+        self.a_digitalizar = a("&Digitalizar do scanner…", self.digitalizar)
 
         self.a_desfazer = a("&Desfazer", self.desfazer, S.Undo)
         self.a_refazer = a("&Refazer", self.refazer, S.Redo)
@@ -193,13 +206,15 @@ class JanelaPrincipal(QMainWindow):
             self.a_comprimir, self.a_proteger, self.a_desproteger,
             self.a_imprimir, self.a_para_word, self.a_ocr, self.a_assinar_cert,
             self.a_verificar, self.a_cabecalho, self.a_recortar,
-            self.a_redimensionar,
+            self.a_redimensionar, self.a_para_pptx, self.a_para_xlsx,
+            self.a_para_md, self.a_extrair_imagens, self.a_pdfa,
+            self.a_marca_imagem, self.a_detectar,
             *self.acoes_ferramenta.values()]
 
     def _criar_menus(self) -> None:
         barra = self.menuBar()
         m = barra.addMenu("&Arquivo")
-        m.addActions([self.a_novo, self.a_abrir])
+        m.addActions([self.a_novo, self.a_abrir, self.a_digitalizar])
         self.menu_recentes = m.addMenu("Abrir &recente")
         self.menu_recentes.aboutToShow.connect(self._montar_recentes)
         m.addSeparator()
@@ -209,9 +224,14 @@ class JanelaPrincipal(QMainWindow):
         m.addSeparator()
         m.addAction(self.a_juntar)
         conv = m.addMenu("Con&verter")
-        conv.addActions([self.a_converter_para_pdf, self.a_para_word,
-                         self.a_exportar, self.a_extrair_texto])
-        m.addActions([self.a_lote, self.a_comparar])
+        conv.addActions([self.a_converter_para_pdf])
+        conv.addSeparator()
+        conv.addActions([self.a_para_word, self.a_para_pptx, self.a_para_xlsx,
+                         self.a_para_md, self.a_exportar,
+                         self.a_extrair_imagens, self.a_extrair_texto])
+        conv.addSeparator()
+        conv.addAction(self.a_pdfa)
+        m.addActions([self.a_lote, self.a_comparar, self.a_reparar])
         m.addSeparator()
         m.addActions([self.a_propriedades, self.a_fechar])
         m.addSeparator()
@@ -269,9 +289,10 @@ class JanelaPrincipal(QMainWindow):
         m.addSeparator()
         m.addActions([self.a_assinar_cert, self.a_verificar])
         m.addSeparator()
-        m.addActions([self.a_formulario, self.a_achatar])
+        m.addActions([self.a_formulario, self.a_detectar, self.a_achatar])
         m.addSeparator()
-        m.addActions([self.a_marca, self.a_numerar, self.a_cabecalho])
+        m.addActions([self.a_marca, self.a_marca_imagem, self.a_numerar,
+                      self.a_cabecalho])
         m.addSeparator()
         m.addActions([self.a_tarjar_texto, self.a_proteger,
                       self.a_desproteger])
@@ -1098,6 +1119,184 @@ class JanelaPrincipal(QMainWindow):
             a._executar(paginas.redimensionar, a.documento,
                         d.formato.currentText(), alvo,
                         margem_mm=d.margem.value())
+
+    # -- 0.3 ---------------------------------------------------------------------------
+    def _destino_convertido(self, a: AbaDocumento, extensao: str,
+                            filtro: str, titulo: str) -> str | None:
+        base = pathlib.Path(a.documento.nome).stem
+        pasta = (a.documento.caminho.parent if a.documento.caminho
+                 else pathlib.Path(modulo_aba.pasta_padrao(self.cfg)))
+        return modulo_aba.pedir_destino(self, titulo,
+                                        str(pasta / f"{base}{extensao}"), filtro)
+
+    def pdf_para_pptx(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        destino = self._destino_convertido(a, ".pptx", "PowerPoint (*.pptx)",
+                                           "PDF para PowerPoint")
+        if not destino:
+            return
+        barra, andamento = self._progresso("Convertendo para PowerPoint…",
+                                           a.documento.paginas)
+        try:
+            conversao_saida.para_powerpoint(a.documento, destino,
+                                            progresso=andamento)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "PDF para PowerPoint", str(erro))
+            return
+        finally:
+            barra.close()
+        self.statusBar().showMessage(f"Salvo: {destino}", 8000)
+
+    def pdf_para_xlsx(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        destino = self._destino_convertido(a, ".xlsx", "Excel (*.xlsx)",
+                                           "PDF para Excel")
+        if not destino:
+            return
+        n = a._executar(conversao_saida.para_excel, a.documento, destino)
+        if n == 0:
+            modulo_aba.avisar(self, "PDF para Excel",
+                              "Nenhuma tabela foi reconhecida neste PDF. Se "
+                              "for escaneado, rode o OCR antes.")
+        elif isinstance(n, int):
+            self.statusBar().showMessage(f"{n} tabela(s) salva(s) em {destino}",
+                                         8000)
+
+    def pdf_para_md(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        destino = self._destino_convertido(a, ".md", "Markdown (*.md)",
+                                           "PDF para Markdown")
+        if not destino:
+            return
+        texto_md = a._executar(conversao_saida.para_markdown, a.documento)
+        if isinstance(texto_md, str):
+            pathlib.Path(destino).write_text(texto_md, "utf-8")
+            self.statusBar().showMessage(f"Salvo: {destino}", 8000)
+
+    def extrair_imagens(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        pasta = modulo_aba.pedir_pasta(self, "Pasta para as imagens",
+                                       modulo_aba.pasta_padrao(self.cfg))
+        if not pasta:
+            return
+        saidas = a._executar(conversao_saida.extrair_imagens, a.documento,
+                             pasta)
+        if isinstance(saidas, list):
+            self.statusBar().showMessage(
+                f"{len(saidas)} imagem(ns) extraída(s) para {pasta}" if saidas
+                else "Este PDF não tem imagens embutidas.", 8000)
+
+    def reparar_pdf(self) -> None:
+        arquivo = modulo_aba.pedir_arquivo(self, "Reparar PDF",
+                                           dialogos.FILTRO_PDF,
+                                           modulo_aba.pasta_padrao(self.cfg))
+        if not arquivo:
+            return
+        try:
+            dados, relatorio = reparar.reparar(arquivo)
+        except Exception as erro:                   # noqa: BLE001
+            modulo_aba.avisar(self, "Reparar PDF", str(erro))
+            return
+        original = pathlib.Path(arquivo)
+        destino = modulo_aba.pedir_destino(
+            self, "Salvar PDF reparado",
+            str(original.with_name(original.stem + "_reparado.pdf")),
+            dialogos.FILTRO_PDF)
+        if not destino:
+            return
+        pathlib.Path(destino).write_bytes(dados)
+        self.abrir(destino)
+        QMessageBox.information(self, "Reparar PDF", relatorio.resumo)
+
+    def converter_pdfa(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        restantes = a._executar(pdfa.para_pdfa, a.documento)
+        if not isinstance(restantes, list):
+            return
+        if restantes:
+            mensagem = ("Ajustes para PDF/A-2b aplicados, mas restam "
+                        "pendências que o EditPDFree não consegue corrigir:\n\n• "
+                        + "\n• ".join(restantes)
+                        + "\n\nO arquivo ainda NÃO é PDF/A válido.")
+        else:
+            mensagem = ("Ajustes para PDF/A-2b aplicados e nenhuma pendência "
+                        "encontrada. Para certificar, valide com o veraPDF.")
+        QMessageBox.information(self, "PDF/A", mensagem + "\n\nSalve o "
+                                "documento para gravar o resultado.")
+
+    def marca_imagem(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        d = dialogos_extras.DialogoMarcaImagem(self)
+        if d.exec() != d.DialogCode.Accepted:
+            return
+        a._executar(extras.marca_dagua_imagem, a.documento,
+                    pathlib.Path(d.arquivo.text().strip()).read_bytes(),
+                    opacidade=d.opacidade.value() / 100,
+                    escala=d.escala.value() / 100,
+                    lado_a_lado=d.lado_a_lado.isChecked(),
+                    atras=d.atras.isChecked())
+
+    def detectar_campos(self) -> None:
+        a = self._aba()
+        if a is None:
+            return
+        sugestoes = a._executar(formularios.detectar_campos, a.documento)
+        if not isinstance(sugestoes, list):
+            return
+        if not sugestoes:
+            modulo_aba.avisar(self, "Detectar campos",
+                              "Nenhum campo encontrado (linhas de "
+                              "sublinhado, traços de preenchimento ou "
+                              "quadrados vazios).")
+            return
+        escolhidas = modulo_aba.pedir_campos(self, sugestoes)
+        if escolhidas:
+            n = a._executar(formularios.criar_sugeridos, a.documento,
+                            escolhidas)
+            if isinstance(n, int):
+                self.statusBar().showMessage(f"{n} campo(s) criado(s).", 6000)
+
+    def digitalizar(self) -> None:
+        imagens: list[bytes] = []
+        while True:
+            try:
+                imagem = modulo_aba.adquirir_digitalizacao()
+            except digitalizar.SemScanner as erro:
+                modulo_aba.avisar(self, "Digitalizar", str(erro))
+                break
+            except Exception as erro:               # noqa: BLE001
+                modulo_aba.avisar(self, "Digitalizar",
+                                  f"Falha ao digitalizar: {erro}")
+                break
+            if imagem is None:
+                break
+            imagens.append(imagem)
+            if not modulo_aba.confirmar(
+                    self, "Digitalizar",
+                    f"{len(imagens)} página(s) digitalizada(s).\n\n"
+                    "Digitalizar outra página?"):
+                break
+        if not imagens:
+            return
+        dados = digitalizar.montar_pdf(imagens)
+        documento = Documento(dados=dados, nome="Digitalizado.pdf")
+        documento.modificado = True
+        self._adicionar_aba(documento)
+        self.statusBar().showMessage(
+            f"{len(imagens)} página(s) digitalizada(s). Use Documento › "
+            "Reconhecer texto (OCR) para tornar o texto pesquisável.", 10000)
 
     # -- estado -----------------------------------------------------------------------
     def _atualizar_estado(self) -> None:

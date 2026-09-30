@@ -27,7 +27,9 @@ excludes = [
     "PySide6.QtPdfWidgets", "PySide6.QtDesigner", "PySide6.QtHelp",
     "PySide6.QtUiTools", "PySide6.QtConcurrent", "PySide6.QtNetwork",
     # Pesos pesados que nada aqui importa.
-    "tkinter", "numpy", "pandas", "matplotlib", "scipy", "PIL",
+    # PIL NAO entra aqui desde a 0.3: o python-pptx e o PDF/A (perfil sRGB)
+    # dependem dele.
+    "tkinter", "numpy", "pandas", "matplotlib", "scipy",
     "PyQt5", "PyQt6", "IPython", "pytest", "setuptools", "pip",
 ]
 
@@ -75,12 +77,14 @@ for _pasta, _padrao in (("editpdfree/recursos/tessdata", "*.traineddata"),
 # interno sem o qual `Document()` falha.
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 datas += collect_data_files("docx")
+datas += collect_data_files("pptx")      # modelo .pptx interno do python-pptx
 datas += collect_data_files("pyhanko")
 datas += collect_data_files("pyhanko_certvalidator")
 hiddenimports = (collect_submodules("pyhanko.sign")
                  + collect_submodules("pyhanko.stamp")
                  + collect_submodules("pyhanko_certvalidator")
-                 + ["docx", "tzlocal"])
+                 + collect_submodules("comtypes")
+                 + ["docx", "tzlocal", "pptx", "openpyxl", "PIL.ImageCms"])
 datas.append(("LICENSE", "."))
 
 a = Analysis(

@@ -48,6 +48,9 @@ meio escrito. Salvar sem alteração é no-op (não mexe na data do arquivo).
 | `EditPDFree.spec` | O **OpenSSL fica** no pacote: o pyHanko importa `ssl`, e sem as DLLs a assinatura morre só no `.exe` ("DLL load failed while importing _ssl"). `tessdata` e `icp_brasil` entram em `datas` e o build aborta se estiverem vazios. |
 | `fontes.py` | `pymupdf.get_text_length` mede errado fora do ASCII ("CÓPIA" media 65 pt em vez de 82). Medir sempre com `fontes.largura`. |
 | `anotacoes.py` | Carimbo é anotação Stamp com imagem; a arte é girada no sentido **contrário** da página (`Annot.set_rotation` não tem efeito em Stamp). |
+| `pdfa.py` | Não promete PDF/A: aplica o que dá (OutputIntent sRGB, XMP coerente com o Info, sem JS/anexos, anotações imprimíveis) e `verificar()` lista o que resta — Base-14 não embutida é o caso comum. |
+| `digitalizar.py` | `montar_pdf` é separado da aquisição WIA para testar sem scanner; a máquina de desenvolvimento TEM um scanner de rede (HP OfficeJet 7740): nunca chamar `adquirir_pagina` num teste. |
+| `extras.marca_dagua_imagem` | `insert_image` não tem opacidade: ela vai no canal alfa da própria imagem. |
 | `app.py` | A autoverificação usa `exigir()`, não `assert`: o `.spec` empacota com `optimize=1`, que remove os asserts. |
 | `idioma.py` | Os `QTranslator` ficam em `app._tradutores`; numa variável local o coletor os destrói e os botões voltam ao inglês. O `.spec` inclui os `.qm`. |
 | testes | `drenar_eventos()` e `encerrar()` (zera o modificado antes de fechar). `preparar_qt()` isola `%APPDATA%` para o processo inteiro. |

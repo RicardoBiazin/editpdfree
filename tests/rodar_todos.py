@@ -32,6 +32,8 @@ SUITES = [
     ("teste_ocr_conversao.py", "OCR embutido; DOCX/TXT/imagem -> PDF -> Word"),
     ("teste_produtividade.py", "lote, comparar, recortar, carimbo, marcadores"),
     ("teste_interface_recursos.py", "recursos 0.2 pela janela e impressao"),
+    ("teste_ferramentas_03.py", "reparar, PPTX/XLSX/MD, imagens, PDF/A, campos"),
+    ("teste_interface_03.py", "recursos 0.3 pela janela, scanner simulado"),
 ]
 
 

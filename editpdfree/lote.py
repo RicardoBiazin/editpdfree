@@ -13,7 +13,7 @@ import os
 import pathlib
 from typing import Callable, Sequence
 
-from . import extras, ocr, paginas, seguranca
+from . import extras, ocr, paginas, pdfa, seguranca
 from .documento import Documento, SenhaNecessaria
 
 
@@ -64,6 +64,15 @@ def op_ocr(idioma: str = "por+eng") -> Operacao:
 
 def op_proteger(senha: str, dono: str | None = None) -> Operacao:
     return Operacao("Senha", lambda d: seguranca.proteger(d, senha, dono))
+
+
+def op_pdfa() -> Operacao:
+    return Operacao("PDF/A", pdfa.para_pdfa)
+
+
+def op_marca_imagem(imagem: bytes, **kw) -> Operacao:
+    return Operacao("Marca d’água de imagem",
+                    lambda d: extras.marca_dagua_imagem(d, imagem, **kw))
 
 
 def op_remover_senha() -> Operacao:

@@ -109,6 +109,19 @@ def pedir_certificado(parent, ultimo: str, visivel: bool) -> dict | None:
             "local": d.local.text(), "arquivo": d.arquivo.text().strip()}
 
 
+def pedir_campos(parent, sugestoes) -> list:
+    from .dialogos_extras import DialogoCamposDetectados
+    d = DialogoCamposDetectados(sugestoes, parent)
+    if d.exec() != d.DialogCode.Accepted:
+        return []
+    return d.escolhidas()
+
+
+def adquirir_digitalizacao() -> bytes | None:
+    from .. import digitalizar
+    return digitalizar.adquirir_pagina()
+
+
 def abrir_url(parent, url: str) -> None:
     # Link de PDF e' dado de terceiro: nunca abre sem o usuario confirmar.
     if confirmar(parent, "Abrir link", f"Abrir no navegador?\n\n{url}"):

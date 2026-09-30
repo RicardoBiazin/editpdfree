@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.2.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.3.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
@@ -35,7 +35,8 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 
 **Converter**
 - Abrir DOCX, XLSX, PPTX, TXT, HTML, EPUB e imagens direto como PDF (usa o LibreOffice se estiver instalado, para mais fidelidade)
-- PDF para Word (`.docx`), para imagens e para texto
+- PDF para Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`, as tabelas), Markdown, imagens e texto
+- Extrair todas as imagens embutidas no formato original
 
 **Produtividade**
 - Processar em lote: OCR, girar, marca d'água, numeração, rodapé, compressão e senha numa pasta inteira (os originais não são alterados)
@@ -44,6 +45,11 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 - Cabeçalho e rodapé com `{n}`, `{total}`, `{arquivo}` e `{data}`; carimbos prontos (APROVADO, CÓPIA, PAGO, RECEBIDO…)
 - Marcadores (sumário lateral) e links para páginas ou sites
 - Imprimir (Ctrl+P)
+- Digitalizar do scanner (qualquer aparelho com driver WIA, inclusive multifuncionais em rede)
+- Reparar PDF danificado, com relatório do que foi recuperado
+- Converter para PDF/A-2b (arquivamento): perfil de cor, metadados XMP, sem JavaScript — e avisa o que não deu para corrigir
+- Marca d'água de imagem (centralizada ou lado a lado, na frente ou atrás)
+- Detectar campos de formulário automaticamente (sublinhados, linhas de preenchimento, quadrados)
 
 **Documento**
 - Preencher formulários, criar campos de texto e caixas de seleção, achatar
@@ -92,7 +98,8 @@ build.bat umarquivo    :: dist\EditPDFree.exe portátil
 - Só é possível editar texto horizontal.
 - Salvar um PDF assinado digitalmente invalida a assinatura (o programa avisa antes).
 - A assinatura digital não consulta revogação (LCR/OCSP) nem acrescenta carimbo de tempo; para a validação jurídica completa use o [validador do ITI](https://validar.iti.gov.br). A assinatura visível não funciona em página girada (use a invisível).
-- PDF para Word reconstrói parágrafos, fontes e imagens, mas não tabelas nem colunas.
+- PDF para Word reconstrói parágrafos, fontes e imagens, mas não tabelas nem colunas. PDF para PowerPoint põe a página como imagem de fundo com o texto editável por cima. PDF para Excel só leva o que for reconhecido como tabela.
+- PDF/A: fontes não embutidas (as 14 padrão, como Helvetica) impedem a conformidade; o programa lista essas pendências. Para certificar, use um validador como o veraPDF.
 - Sem LibreOffice, DOCX/XLSX/PPTX são diagramados pelo MuPDF: tabelas complexas e fontes específicas podem mudar.
 - Um PDF protegido só por senha de proprietário (abre sem senha) perde essas restrições ao ser salvo, porque a senha de proprietário não é conhecida.
 
