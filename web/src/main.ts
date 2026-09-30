@@ -453,13 +453,32 @@ const acoes: Record<string, () => unknown> = {
   sobre: () => sobre(),
   comprimir: async () => {
     if (!exigirDocumento()) return;
-    const sel = el("select");
-    for (const [k, v] of Object.entries(NIVEIS_COMPRESSAO)) sel.append(el("option", { value: k, textContent: v.rotulo, selected: k === "media" }));
-    const { valor } = await dialogo("Comprimir", [campo("Nível", sel,
-      "Reduz a resolução das imagens maiores que o necessário, regrava como JPEG só quando fica menor, e enxuga fontes e objetos repetidos. Ctrl+Z desfaz."),
+    // Tres opcoes, cada uma com o tamanho estimado (calculado no worker, numa
+    // copia do documento, enquanto o dialogo ja' esta' aberto).
+    const atual = el("p", { classe: "dica", textContent: "Calculando o tamanho de cada opção…" });
+    const estimativas: Record<string, HTMLElement> = {};
+    const opcoes = Object.entries(NIVEIS_COMPRESSAO).map(([k, v]) => {
+      const radio = el("input", { type: "radio", name: "nivel", value: k, checked: k === "media" });
+      estimativas[k] = el("strong", { classe: "estimativa", textContent: "…" });
+      return el("label", { classe: "opcao-compressao" }, radio,
+        el("span", {}, el("span", { classe: "opcao-titulo" }, `${v.rotulo} `, estimativas[k]),
+          el("small", { textContent: `${v.descricao} Imagens a ${v.dpi} dpi, JPEG ${v.qualidade}%.` })));
+    });
+    const niveis = Object.entries(NIVEIS_COMPRESSAO).map(([chave, v]) => ({ chave, dpi: v.dpi, qualidade: v.qualidade }));
+    motor.operar("estimarCompressao", { niveis }).then(({ r }) => {
+      const t = r as Record<string, number>;
+      atual.textContent = `Tamanho atual: ${tamanho(t.atual)}`;
+      for (const [k, e] of Object.entries(estimativas)) {
+        const pct = t.atual ? Math.round((1 - t[k] / t.atual) * 100) : 0;
+        e.textContent = `≈ ${tamanho(t[k])}${pct > 0 ? ` (−${pct}%)` : " (sem ganho)"}`;
+      }
+    }).catch(() => { atual.textContent = "Não foi possível estimar os tamanhos."; });
+    const { valor, form } = await dialogo("Comprimir PDF", [atual, ...opcoes,
+      el("p", { classe: "dica", textContent: "A compressão atua sobretudo nas imagens: um PDF só de texto quase não diminui. Ctrl+Z desfaz." }),
     ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Comprimir", valor: "ok", primario: true }]);
     if (valor !== "ok") return;
-    const nivel = NIVEIS_COMPRESSAO[sel.value as keyof typeof NIVEIS_COMPRESSAO];
+    const escolhido = (form.querySelector("input[name=nivel]:checked") as HTMLInputElement | null)?.value ?? "media";
+    const nivel = NIVEIS_COMPRESSAO[escolhido as keyof typeof NIVEIS_COMPRESSAO];
     const r = await operar("comprimir", { opcoes: { dpi: nivel.dpi, qualidade: nivel.qualidade } });
     if (r === FALHOU) return;
     const { antes, depois, imagens } = r as { antes: number; depois: number; imagens: number };

@@ -41,9 +41,15 @@ export const CARIMBOS = ["APROVADO", "REPROVADO", "CÓPIA", "PAGO", "RECEBIDO", 
   "URGENTE", "CANCELADO", "CONFERIDO"] as const;
 
 
+/** Os mesmos tres niveis do desktop (editpdfree/extras.py NIVEIS_COMPRESSAO):
+ *  mudar um sem o outro faz o mesmo nome comprimir diferente em cada versao. */
 export const NIVEIS_COMPRESSAO = {
-  leve: { dpi: 200, qualidade: 85, rotulo: "Leve (200 dpi, qualidade alta)" },
-  media: { dpi: 144, qualidade: 72, rotulo: "Média (144 dpi) — recomendada" },
-  forte: { dpi: 96, qualidade: 55, rotulo: "Forte (96 dpi, qualidade menor)" },
+  leve: { dpi: 150, qualidade: 80, rotulo: "Leve",
+    descricao: "Quase sem perda visível. Bom para imprimir." },
+  media: { dpi: 110, qualidade: 65, rotulo: "Recomendada",
+    descricao: "Equilíbrio entre tamanho e qualidade. Bom para e-mail e sistemas." },
+  forte: { dpi: 72, qualidade: 45, rotulo: "Máxima",
+    descricao: "Menor arquivo, para ler na tela. Imagens perdem nitidez." },
 } as const;
+export type NivelCompressao = keyof typeof NIVEIS_COMPRESSAO;
 

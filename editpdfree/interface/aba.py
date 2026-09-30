@@ -122,6 +122,17 @@ def adquirir_digitalizacao() -> bytes | None:
     return digitalizar.adquirir_pagina()
 
 
+def pedir_compressao(parent, estimar, tamanho: int):
+    """(nivel, dpi, qualidade) -- nivel None = personalizada -- ou None."""
+    d = dialogos.DialogoComprimir(parent, estimar, tamanho)
+    if d.exec() != d.DialogCode.Accepted:
+        return None
+    nivel = d.nivel()
+    if nivel is None:
+        return None, d.dpi.value(), d.qualidade.value()
+    return nivel, None, None
+
+
 def pedir_juntar(parent, pasta: str, abertos) -> tuple[list, bool] | None:
     """(fontes na ordem escolhida, criar marcadores?) ou None."""
     from .dialogo_juntar import DialogoJuntar

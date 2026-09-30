@@ -14,7 +14,7 @@
  */
 
 import * as mupdf from "mupdf";
-import { bytesDoBuffer, type Sessao } from "./documento.ts";
+import { bytesDoBuffer, Sessao } from "./documento.ts";
 
 export interface OpcoesCompressao {
   /** Resolucao alvo das imagens (pontos por polegada). */
@@ -138,6 +138,29 @@ export function comprimir(s: Sessao, op: OpcoesCompressao = {}): ResultadoCompre
   s.compactar = true;
   const depois = s.gravarCopia().length;
   return { antes, depois, imagens };
+}
+
+/** Tamanho que o arquivo teria em cada nivel, SEM mexer no documento aberto.
+ *  Cada nivel roda `comprimir()` numa Sessao COPIA -- o mesmo caminho do botao
+ *  Comprimir, para a estimativa bater com o resultado real. (Uma versao que
+ *  reamostrava direto num PDFDocument copiado e gravava com garbage dava
+ *  numeros sem sentido quando a imagem NAO era regravada: 3 KB em vez de
+ *  120 KB -- a imagem sumia na gravacao depois de `loadImage`.) */
+export function estimar(s: Sessao, niveis: { chave: string; dpi: number; qualidade: number }[]):
+  Record<string, number> {
+  const base = s.instantaneo();
+  const saida: Record<string, number> = {};
+  for (const n of niveis) {
+    const copia = Sessao.abrir(base.slice(), "estimativa.pdf");
+    try {
+      const r = comprimir(copia, { dpi: n.dpi, qualidade: n.qualidade });
+      saida.atual ??= r.antes;
+      saida[n.chave] = r.depois;
+    } finally {
+      copia.doc.destroy();
+    }
+  }
+  return saida;
 }
 
 export interface ResultadoReparo {

@@ -196,23 +196,119 @@ class DialogoNumeracao(QDialog):
 
 # -- comprimir ------------------------------------------------------------------
 class DialogoComprimir(QDialog):
-    def __init__(self, parent=None):
+    """Tres niveis prontos (com o tamanho estimado de cada um) ou valores
+    proprios. A estimativa roda numa copia do documento e e' pedida por
+    `estimar` -- uma funcao, para o teste nao depender de arquivo grande."""
+
+    def __init__(self, parent=None, estimar=None, tamanho_arquivo: int = 0):
         super().__init__(parent)
-        self.setWindowTitle("Comprimir")
+        from .. import extras
+        self.setWindowTitle("Comprimir PDF")
+        self.resize(560, 0)
+        self._estimar = estimar
+        self.opcoes: dict[str, QRadioButton] = {}
+        self.estimativas: dict[str, QLabel] = {}
+        layout = QVBoxLayout(self)
+        self.atual = QLabel("")
+        layout.addWidget(self.atual)
+        for chave, nivel in extras.NIVEIS_COMPRESSAO.items():
+            botao = QRadioButton(nivel["rotulo"])
+            botao.setChecked(chave == "media")
+            estimativa = QLabel("")
+            estimativa.setStyleSheet("font-weight: bold;")
+            detalhe = QLabel(f"{nivel['descricao']} Imagens a {nivel['dpi']} "
+                             f"dpi, JPEG {nivel['qualidade']}%.")
+            detalhe.setWordWrap(True)
+            # Sem cor fixa: "palette(mid)" ficava ilegivel no tema escuro.
+            detalhe.setStyleSheet("margin-left: 22px; font-size: 8.5pt;")
+            linha = QHBoxLayout()
+            linha.addWidget(botao)
+            linha.addStretch()
+            linha.addWidget(estimativa)
+            layout.addLayout(linha)
+            layout.addWidget(detalhe)
+            self.opcoes[chave] = botao
+            self.estimativas[chave] = estimativa
+        self.personalizada = QRadioButton("Personalizada")
         self.dpi = QSpinBox()
         self.dpi.setRange(36, 600)
         self.dpi.setValue(110)
         self.dpi.setSuffix(" dpi")
         self.qualidade = QSpinBox()
         self.qualidade.setRange(10, 100)
-        self.qualidade.setValue(70)
+        self.qualidade.setValue(65)
         self.qualidade.setSuffix(" %")
-        form = QFormLayout(self)
-        form.addRow("Resolução das imagens:", self.dpi)
-        form.addRow("Qualidade JPEG:", self.qualidade)
-        form.addRow(QLabel("Imagens acima da resolução são reduzidas. O "
-                           "tamanho final aparece ao salvar."))
-        form.addRow(_botoes(self, "Comprimir"))
+        for w in (self.dpi, self.qualidade):
+            w.setEnabled(False)
+        self.personalizada.toggled.connect(self.dpi.setEnabled)
+        self.personalizada.toggled.connect(self.qualidade.setEnabled)
+        linha = QHBoxLayout()
+        linha.addWidget(self.personalizada)
+        linha.addWidget(QLabel("Resolução:"))
+        linha.addWidget(self.dpi)
+        linha.addWidget(QLabel("Qualidade JPEG:"))
+        linha.addWidget(self.qualidade)
+        linha.addStretch()
+        layout.addLayout(linha)
+        self.calcular = QPushButton("Calcular tamanhos")
+        self.calcular.clicked.connect(self.estimar)
+        self.calcular.setVisible(estimar is not None)
+        dica = QLabel("A compressão atua sobretudo nas imagens: um PDF só de "
+                      "texto quase não diminui. Ctrl+Z desfaz; o tamanho "
+                      "final vale para o próximo “Salvar”.")
+        dica.setWordWrap(True)
+        layout.addWidget(self.calcular)
+        layout.addWidget(dica)
+        layout.addWidget(_botoes(self, "Comprimir"))
+        self._atual = tamanho_arquivo
+        if tamanho_arquivo:
+            self.atual.setText(f"Tamanho atual: {formatar_tamanho(tamanho_arquivo)}")
+        # Documento pequeno: calcula sozinho ao abrir. Grande (acima de
+        # 30 MB) espera o botao -- reamostrar tres vezes demora.
+        if estimar is not None and 0 < tamanho_arquivo <= 30 * 1024 * 1024:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self.estimar)
+
+    def estimar(self) -> dict[str, int] | None:
+        if self._estimar is None:
+            return None
+        from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtWidgets import QApplication
+        for rotulo in self.estimativas.values():
+            rotulo.setText("calculando…")
+        QApplication.setOverrideCursor(_Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+        try:
+            tamanhos = self._estimar()
+        except Exception as erro:                   # noqa: BLE001
+            for rotulo in self.estimativas.values():
+                rotulo.setText("")
+            self.atual.setText(f"Não foi possível estimar: {erro}")
+            return None
+        finally:
+            QApplication.restoreOverrideCursor()
+        atual = tamanhos.get("atual") or self._atual
+        self.atual.setText(f"Tamanho atual: {formatar_tamanho(atual)}")
+        for chave, rotulo in self.estimativas.items():
+            if chave in tamanhos:
+                novo = tamanhos[chave]
+                pct = round((1 - novo / atual) * 100) if atual else 0
+                rotulo.setText(f"≈ {formatar_tamanho(novo)}"
+                               + (f"  (−{pct}%)" if pct > 0 else "  (sem ganho)"))
+        self.calcular.setVisible(False)
+        return tamanhos
+
+    def nivel(self) -> str | None:
+        for chave, botao in self.opcoes.items():
+            if botao.isChecked():
+                return chave
+        return None
+
+
+def formatar_tamanho(n: int) -> str:
+    if n >= 1024 * 1024:
+        return f"{n / (1024 * 1024):.1f} MB".replace(".", ",")
+    return f"{max(1, round(n / 1024))} KB"
 
 
 # -- exportar -------------------------------------------------------------------

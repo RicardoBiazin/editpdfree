@@ -862,15 +862,23 @@ class JanelaPrincipal(QMainWindow):
         a = self._aba()
         if a is None:
             return
-        d = dialogos.DialogoComprimir(self)
-        if d.exec() == d.DialogCode.Accepted:
-            antes = len(a.documento.para_bytes())
-            a._executar(extras.comprimir, a.documento, dpi=d.dpi.value(),
-                        qualidade=d.qualidade.value())
-            depois = len(a.documento.para_bytes())
-            self.statusBar().showMessage(
-                f"Tamanho estimado: {antes / 1024:,.0f} KB → "
-                f"{depois / 1024:,.0f} KB".replace(",", "."), 8000)
+        doc = a.documento
+        antes = len(doc.para_bytes())
+        escolha = modulo_aba.pedir_compressao(
+            self, lambda: extras.estimar_compressao(doc), antes)
+        if escolha is None:
+            return
+        nivel, dpi, qualidade = escolha
+        if a._executar(extras.comprimir, doc, nivel, dpi=dpi,
+                       qualidade=qualidade) is modulo_aba.FALHOU:
+            return
+        depois = len(doc.para_bytes())
+        pct = round((1 - depois / antes) * 100) if antes else 0
+        self.statusBar().showMessage(
+            f"Comprimido: {dialogos.formatar_tamanho(antes)} → "
+            f"{dialogos.formatar_tamanho(depois)}"
+            + (f" ({pct}% menor)" if pct > 0 else " (já estava enxuto)")
+            + ". Salve para gravar.", 10000)
 
     def proteger(self) -> None:
         a = self._aba()

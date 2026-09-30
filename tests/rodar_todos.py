@@ -36,6 +36,7 @@ SUITES = [
     ("teste_interface_03.py", "recursos 0.3 pela janela, scanner simulado"),
     ("teste_atalhos.py", "barra de atalhos personalizavel"),
     ("teste_juntar.py", "juntar PDFs escolhendo a ordem"),
+    ("teste_compressao.py", "comprimir em tres niveis, com estimativa"),
 ]
 
 

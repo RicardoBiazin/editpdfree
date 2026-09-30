@@ -294,7 +294,13 @@ class DialogoLote(QDialog):
         self.numerar_formato = QLineEdit("{n} / {total}")
         self.rodape = QCheckBox("Rodapé:")
         self.rodape_texto = QLineEdit("{arquivo} — {data}")
-        self.comprimir = QCheckBox("Comprimir imagens")
+        self.comprimir = QCheckBox("Comprimir:")
+        self.comprimir_nivel = QComboBox()
+        from .. import extras as _extras
+        for chave, n in _extras.NIVEIS_COMPRESSAO.items():
+            self.comprimir_nivel.addItem(n["rotulo"], chave)
+        self.comprimir_nivel.setCurrentIndex(
+            self.comprimir_nivel.findData("media"))
         self.pdfa = QCheckBox("Converter para PDF/A (arquivamento)")
         self.senha = QCheckBox("Proteger com senha:")
         self.senha_texto = QLineEdit()
@@ -305,7 +311,7 @@ class DialogoLote(QDialog):
         ops.addRow(self.marca, self.marca_texto)
         ops.addRow(self.numerar, self.numerar_formato)
         ops.addRow(self.rodape, self.rodape_texto)
-        ops.addRow(self.comprimir)
+        ops.addRow(self.comprimir, self.comprimir_nivel)
         ops.addRow(self.pdfa)
         ops.addRow(self.senha, self.senha_texto)
 
@@ -367,7 +373,8 @@ class DialogoLote(QDialog):
             ops.append(lote.op_cabecalho_rodape(
                 {"inferior-esquerda": self.rodape_texto.text()}))
         if self.comprimir.isChecked():
-            ops.append(lote.op_comprimir())
+            ops.append(lote.op_comprimir(
+                nivel=self.comprimir_nivel.currentData()))
         if self.pdfa.isChecked():
             ops.append(lote.op_pdfa())
         if self.senha.isChecked():

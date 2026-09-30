@@ -82,18 +82,80 @@ def numerar(d: Documento, *, formato: str = "{n} / {total}",
                           fontname="helv", color=cor, rotate=p.rotation)
 
 
-def comprimir(d: Documento, *, dpi: int = 110, qualidade: int = 70) -> None:
-    """Reamostra imagens acima de `dpi` e subconjunta as fontes. O resto do
-    ganho vem de gravar com garbage/deflate, que `Documento.salvar` ja' faz."""
-    with d.operacao("Comprimir"):
-        d.doc.rewrite_images(dpi_threshold=int(dpi * 1.3), dpi_target=dpi,
-                             quality=qualidade)
-        try:
-            d.doc.subset_fonts()
-        except Exception:                         # noqa: BLE001
-            # Fonte que nao se deixa subconjuntar fica como estava; a
-            # reamostragem das imagens continua valendo.
-            pass
+#: Os tres niveis oferecidos ao usuario (os mesmos valores da versao web,
+#: em web/src/core/formatos.ts -- mudar um sem o outro faz o mesmo nome
+#: comprimir diferente em cada versao).
+NIVEIS_COMPRESSAO = {
+    "leve": {"rotulo": "Leve", "dpi": 150, "qualidade": 80,
+             "descricao": "Quase sem perda visível. Bom para imprimir."},
+    "media": {"rotulo": "Recomendada", "dpi": 110, "qualidade": 65,
+              "descricao": "Equilíbrio entre tamanho e qualidade. Bom para "
+                           "e-mail e sistemas."},
+    "forte": {"rotulo": "Máxima", "dpi": 72, "qualidade": 45,
+              "descricao": "Menor arquivo, para ler na tela. Imagens perdem "
+                         "nitidez; remove miniaturas e metadados XML."},
+}
+
+#: Opcoes de gravacao usadas para MEDIR o resultado -- as mesmas do salvar.
+OPCOES_GRAVAR = {"garbage": 3, "deflate": True, "use_objstms": 1}
+
+
+def _aplicar_compressao(doc: pymupdf.Document, dpi: int, qualidade: int,
+                        limpar: bool) -> None:
+    doc.rewrite_images(dpi_threshold=int(dpi * 1.3), dpi_target=dpi,
+                       quality=qualidade)
+    try:
+        doc.subset_fonts()
+    except Exception:                             # noqa: BLE001
+        # Fonte que nao se deixa subconjuntar fica como estava; a
+        # reamostragem das imagens continua valendo.
+        pass
+    if limpar:
+        doc.scrub(attached_files=False, clean_pages=False,
+                  embedded_files=False, hidden_text=False, javascript=False,
+                  metadata=False, redactions=False, redact_images=0,
+                  remove_links=False, reset_fields=False,
+                  reset_responses=False, thumbnails=True, xml_metadata=True)
+
+
+def _parametros(nivel: str | None, dpi: int | None,
+                qualidade: int | None) -> tuple[int, int, bool]:
+    if nivel is not None:
+        if nivel not in NIVEIS_COMPRESSAO:
+            raise ValueError(f"nível de compressão desconhecido: {nivel}")
+        n = NIVEIS_COMPRESSAO[nivel]
+        return n["dpi"], n["qualidade"], nivel == "forte"
+    return dpi or 110, qualidade or 65, False
+
+
+def comprimir(d: Documento, nivel: str | None = None, *,
+              dpi: int | None = None, qualidade: int | None = None) -> None:
+    """Reamostra imagens acima da resolucao alvo, subconjunta as fontes e
+    (no nivel maximo) tira miniaturas e metadados XML. Por nivel ("leve",
+    "media", "forte") ou valores proprios (dpi, qualidade)."""
+    dpi, qualidade, limpar = _parametros(nivel, dpi, qualidade)
+    rotulo = NIVEIS_COMPRESSAO[nivel]["rotulo"].lower() if nivel else None
+    with d.operacao(f"Comprimir ({rotulo})" if rotulo else "Comprimir"):
+        _aplicar_compressao(d.doc, dpi, qualidade, limpar)
+
+
+def estimar_compressao(d: Documento, niveis=None, progresso=None
+                       ) -> dict[str, int]:
+    """Tamanho que o arquivo teria em cada nivel, SEM mexer no documento
+    (cada nivel roda numa copia). Inclui "atual": o tamanho de hoje, medido
+    do mesmo jeito, para a comparacao ser justa."""
+    niveis = list(niveis or NIVEIS_COMPRESSAO)
+    base = d.doc.tobytes(garbage=0, encryption=pymupdf.PDF_ENCRYPT_NONE)
+    with pymupdf.open("pdf", base) as copia:
+        tamanhos = {"atual": len(copia.tobytes(**OPCOES_GRAVAR))}
+    for n, nivel in enumerate(niveis):
+        if progresso is not None and progresso(n, len(niveis)) is False:
+            break
+        dpi, qualidade, limpar = _parametros(nivel, None, None)
+        with pymupdf.open("pdf", base) as copia:
+            _aplicar_compressao(copia, dpi, qualidade, limpar)
+            tamanhos[nivel] = len(copia.tobytes(**OPCOES_GRAVAR))
+    return tamanhos
 
 
 def exportar_imagens(d: Documento, pasta: str | os.PathLike, *,

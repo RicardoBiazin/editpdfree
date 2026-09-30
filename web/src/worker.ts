@@ -141,6 +141,7 @@ const operacoes: Record<string, (a: Args) => unknown> = {
   proteger: (a) => sessao().proteger(a.senhaAbrir, a.senhaDono, a.permissoes),
   removerProtecao: () => sessao().removerProtecao(),
   comprimir: (a) => otim.comprimir(sessao(), a.opcoes),
+  estimarCompressao: (a) => otim.estimar(sessao(), a.niveis),
   recortarRetangulo: (a) => recorte.recortarRetangulo(sessao(), a.indices, a.rect),
   recortarMargens: (a) => recorte.recortarMargens(sessao(), a.indices, a.margens),
   criarCampos: (a) => campos.criarCampos(sessao(), a.campos),

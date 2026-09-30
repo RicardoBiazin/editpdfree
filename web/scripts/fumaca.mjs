@@ -478,8 +478,13 @@ try {
   // ---- comprimir
   ok(await abrirArquivoNoApp(criarPdfComImagemGrande(), "foto.pdf"), "abriu PDF com imagem grande");
   await menu("comprimir");
-  await aguardar(`!!document.querySelector("dialog[open] select")`);
-  await noDialogo(`d.querySelector("select").value = "forte"`);
+  await aguardar(`document.querySelectorAll("dialog[open] input[name=nivel]").length === 3`);
+  ok(await avaliar(`document.querySelectorAll("dialog[open] input[name=nivel]").length === 3`), "comprimir: três opções");
+  ok(await aguardar(`[...document.querySelectorAll("dialog[open] .estimativa")].every(e => e.textContent.includes("≈"))`, 60000),
+    "comprimir: tamanho estimado de cada opção");
+  console.log("     (" + (await avaliar(`[...document.querySelectorAll("dialog[open] .opcao-titulo")].map(e => e.textContent.trim()).join(" | ")`)) + ")");
+  await captura("fumaca-11-comprimir.png");
+  await noDialogo(`d.querySelector("input[name=nivel][value=forte]").checked = true`);
   await confirmarDialogo();
   ok(await aguardar(`(document.querySelector("dialog[open]")?.textContent ?? "").includes("→")`, 30000), "comprimir mostra tamanho antes → depois");
   ok(await avaliar(`/\\d+% menor/.test(document.querySelector("dialog[open]").textContent)`), "comprimir: arquivo ficou menor");

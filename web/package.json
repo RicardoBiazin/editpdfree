@@ -1,7 +1,7 @@
 {
   "name": "editpdfree-web",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "EditPDFree para navegador: editor de PDF gratuito que roda inteiro no navegador (MuPDF.js/WASM).",
   "license": "AGPL-3.0-or-later",
   "type": "module",

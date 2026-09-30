@@ -66,7 +66,7 @@ def coordenadas_giradas() -> None:
 
 _SEM_ACENTO = re.compile(
     r"\b(nao|voce|pagina|paginas|codificacao|operacao|anotacao|selecao|"
-    r"formulario|propriedades do documento|numero|versao|opcao|informacao|"
+    r"formulario|numero|versao|opcao|informacao|"
     r"conteudo|possivel|invalido|invalida|protecao)\b", re.IGNORECASE)
 
 

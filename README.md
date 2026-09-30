@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.5.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.6.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
@@ -56,7 +56,8 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 - **Tarjar de verdade**: remove o texto e os pixels de imagem da área, não é um retângulo preto por cima
 - Tarjar todas as ocorrências de um texto (um CPF, por exemplo)
 - Proteger com senha (AES-256) e permissões, ou remover a senha
-- Marca d'água, numeração de páginas, compressão de imagens
+- Marca d'água, numeração de páginas
+- **Comprimir em 3 níveis** (Leve, Recomendada, Máxima) mostrando antes o tamanho estimado de cada um, ou valores personalizados
 - Exportar páginas como PNG ou JPG, editar título/autor/assunto
 
 Desfazer/refazer (Ctrl+Z / Ctrl+Y) vale para todas as operações. Qualquer item dos menus pode virar botão na **barra de atalhos** (Exibir › Personalizar barra de atalhos, ou botão direito numa barra). Arraste PDFs para a janela para abri-los.
