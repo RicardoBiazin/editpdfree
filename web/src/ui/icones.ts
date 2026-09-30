@@ -38,6 +38,14 @@ const P: Record<string, string> = {
   abaixo: '<path d="M6 9l6 6 6-6"/>',
   cadeado: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+  recortar: '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
+  campoTexto: '<rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 10v4M5 10h2M5 14h2"/>',
+  campoCaixa: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/>',
+  carimbo: '<path d="M9 3h6l-1 7h-4z"/><path d="M5 14h14v4H5z"/><path d="M4 21h16"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  comparar: '<rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/><path d="M12 2v20"/>',
+  ferramentas: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.3-.7-.7-2.3z"/>',
+  marcadores: '<path d="M6 3h12v18l-6-4-6 4z"/>',
 };
 
 export function icone(nome: string, extra = ""): string {

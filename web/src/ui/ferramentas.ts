@@ -16,12 +16,29 @@ import type { Campo } from "../core/formularios.ts";
 import type { Trecho } from "../core/texto.ts";
 import type { Resultado } from "../core/seguranca.ts";
 import { normalizar, type Ponto, type Retangulo } from "../core/coordenadas.ts";
-import { avisar, campo, dialogo, el, pedirTexto } from "./dialogos.ts";
+import { avisar, campo, confirmar, dialogo, el, pedirTexto } from "./dialogos.ts";
 import { dataUrlParaBytes, pedirAssinatura } from "./assinatura.ts";
+import type { LinkPagina } from "../core/mais.ts";
+import type { Sugestao } from "../core/criarcampos.ts";
+import { CARIMBOS } from "../core/formatos.ts";
+
+/** Escolher o texto do carimbo: um dos prontos ou um proprio. */
+async function escolherCarimbo(atual: string): Promise<string | null> {
+  const sel = el("select");
+  for (const t of CARIMBOS) sel.append(el("option", { value: t, textContent: t, selected: t === atual }));
+  sel.append(el("option", { value: "", textContent: "Outro texto…", selected: !(CARIMBOS as readonly string[]).includes(atual) }));
+  const proprio = el("input", { type: "text", value: (CARIMBOS as readonly string[]).includes(atual) ? "" : atual, placeholder: "Ex.: ARQUIVADO" });
+  const { valor } = await dialogo("Carimbo", [campo("Texto do carimbo", sel), campo("Outro texto", proprio,
+    "Usa a cor escolhida na barra. O carimbo é uma anotação: dá para mover e excluir.")],
+  [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Escolher", valor: "ok", primario: true }],
+  () => sel.focus(), () => (!sel.value && !proprio.value.trim() ? "Escreva o texto do carimbo." : null));
+  if (valor !== "ok") return null;
+  return (sel.value || proprio.value).trim().toUpperCase();
+}
 
 export type NomeFerramenta = "selecionar" | "caixaTexto" | "nota" | "destacar" | "sublinhar" | "tachar"
   | "caneta" | "retangulo" | "elipse" | "linha" | "seta" | "assinatura" | "imagem" | "texto"
-  | "editarTexto" | "tarjar";
+  | "editarTexto" | "tarjar" | "recortar" | "campoTexto" | "campoCaixa" | "carimbo";
 
 export const FERRAMENTAS: { nome: NomeFerramenta; rotulo: string; icone: string; dica: string }[] = [
   { nome: "selecionar", rotulo: "Selecionar", icone: "selecionar", dica: "Selecionar, mover (arrastar) e excluir anotações (Delete); preencher formulários" },
@@ -40,10 +57,14 @@ export const FERRAMENTAS: { nome: NomeFerramenta; rotulo: string; icone: string;
   { nome: "texto", rotulo: "Adicionar texto", icone: "texto", dica: "Adicionar texto no conteúdo da página: clique onde o texto começa" },
   { nome: "editarTexto", rotulo: "Editar texto", icone: "editarTexto", dica: "Editar texto: clique numa linha de texto do PDF" },
   { nome: "tarjar", rotulo: "Tarjar", icone: "tarjar", dica: "Tarjar: arraste sobre a área — o conteúdo é removido de verdade" },
+  { nome: "carimbo", rotulo: "Carimbo", icone: "carimbo", dica: "Carimbo (APROVADO, PAGO, CÓPIA…): escolha o texto e clique na página" },
+  { nome: "recortar", rotulo: "Recortar", icone: "recortar", dica: "Recortar: arraste a área que deve ficar visível" },
+  { nome: "campoTexto", rotulo: "Campo de texto", icone: "campoTexto", dica: "Criar campo de texto do formulário: arraste (ou clique)" },
+  { nome: "campoCaixa", rotulo: "Caixa de seleção", icone: "campoCaixa", dica: "Criar caixa de seleção do formulário: clique ou arraste" },
 ];
 
 const ARRASTAR = new Set<NomeFerramenta>(["destacar", "sublinhar", "tachar", "retangulo", "elipse", "linha",
-  "seta", "tarjar", "caixaTexto", "imagem", "assinatura"]);
+  "seta", "tarjar", "caixaTexto", "imagem", "assinatura", "recortar", "campoTexto", "campoCaixa"]);
 
 export interface Contexto {
   visor: Visor;
@@ -52,6 +73,7 @@ export interface Contexto {
   operar(tipo: string, args: unknown, transferir?: Transferable[]): Promise<unknown>;
   escolherImagem(): Promise<{ bytes: Uint8Array; nome: string } | null>;
   aoMudarFerramenta(nome: NomeFerramenta): void;
+  irPara(pagina: number): void;
 }
 
 interface Selecao { pagina: number; id: number; info: InfoAnotacao }
@@ -85,6 +107,10 @@ export class Ferramentas {
   private assinaturaPng: string | null = null;
   private imagem: { bytes: Uint8Array; nome: string } | null = null;
   private busca: { resultados: Resultado[]; atual: number } = { resultados: [], atual: -1 };
+  private links = new Map<number, { versao: number; lista: LinkPagina[] }>();
+  private sugestoes: { s: Sugestao; ativa: boolean }[] = [];
+  private barraSugestoes: HTMLElement | null = null;
+  private carimboTexto = "APROVADO";
 
   constructor(c: Contexto) {
     this.c = c;
@@ -101,6 +127,10 @@ export class Ferramentas {
       const img = await this.c.escolherImagem();
       if (!img) return;
       this.imagem = img;
+    } else if (nome === "carimbo") {
+      const t = await escolherCarimbo(this.carimboTexto);
+      if (!t) return;
+      this.carimboTexto = t;
     }
     this.atual = nome;
     this.desselecionar();
@@ -118,6 +148,7 @@ export class Ferramentas {
     this.aplicarClasse(p);
     p.camada.addEventListener("pointerdown", (ev) => this.aoApertar(p, ev));
     this.desenharBusca(p);
+    this.desenharSugestoes(p);
   }
 
   /** Pagina ficou visivel ou o documento mudou: atualiza anotacoes e campos. */
@@ -136,14 +167,107 @@ export class Ferramentas {
         if (this.c.visor.paginas[i] === p) this.desenharCampos(p);
       }).catch(() => undefined));
     }
+    if (this.links.get(i)?.versao !== v) {
+      tarefas.push(this.c.motor.pedir<LinkPagina[]>("links", { pagina: i }).then((lista) => {
+        this.links.set(i, { versao: v, lista });
+        if (this.c.visor.paginas[i] === p) this.desenharLinks(p);
+      }).catch(() => undefined));
+    }
     await Promise.all(tarefas);
     this.desenharBusca(p);
+    this.desenharSugestoes(p);
+  }
+
+  // ------------------------------------------------------------ links
+
+  private desenharLinks(p: PaginaVisor): void {
+    for (const e of p.extras.querySelectorAll(".link-pdf")) e.remove();
+    for (const l of this.links.get(p.indice)?.lista ?? []) {
+      const a = el("a", { classe: "link-pdf", href: l.externo ? l.uri : "#",
+        title: l.externo ? `Link: ${l.uri}` : `Ir para a página ${(l.destino ?? 0) + 1}` });
+      a.setAttribute("rel", "noopener noreferrer");
+      posicionar(a, p, l.rect);
+      a.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      a.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!l.externo) {
+          if (l.destino !== null) this.c.irPara(l.destino);
+          return;
+        }
+        // Sair do app e' decisao do usuario: o link vem do PDF.
+        if (await confirmar("Abrir link externo", `O PDF aponta para ${l.uri}. Abrir numa nova aba?`, "Abrir")) {
+          window.open(l.uri, "_blank", "noopener,noreferrer");
+        }
+      });
+      p.extras.append(a);
+    }
+  }
+
+  // ------------------------------------------------------------ sugestoes de campos
+
+  mostrarSugestoes(lista: Sugestao[]): void {
+    this.descartarSugestoes();
+    if (!lista.length) return;
+    this.sugestoes = lista.map((s) => ({ s, ativa: true }));
+    const cont = el("span");
+    const criar = el("button", { classe: "primario", type: "button" });
+    const descartar = el("button", { type: "button", textContent: "Descartar" });
+    const atualizar = () => {
+      const n = this.sugestoes.filter((x) => x.ativa).length;
+      cont.textContent = `${this.sugestoes.length} campo(s) sugerido(s). Clique numa sugestão para desmarcá-la.`;
+      criar.textContent = `Criar ${n} campo(s)`;
+      criar.disabled = n === 0;
+    };
+    this.atualizarBarra = atualizar;
+    criar.addEventListener("click", async () => {
+      const escolhidos = this.sugestoes.filter((x) => x.ativa).map((x) => x.s);
+      this.descartarSugestoes();
+      const r = await this.c.operar("criarCampos", { campos: escolhidos });
+      if (r !== FALHOU) avisar(`${escolhidos.length} campo(s) criado(s). Use Selecionar para preenchê-los.`, "ok");
+    });
+    descartar.addEventListener("click", () => this.descartarSugestoes());
+    this.barraSugestoes = el("div", { classe: "barra-sugestoes", role: "status" } as Partial<HTMLDivElement>, cont, criar, descartar);
+    document.body.append(this.barraSugestoes);
+    atualizar();
+    for (const p of this.c.visor.paginas) this.desenharSugestoes(p);
+    const primeira = lista[0];
+    this.c.visor.mostrarRetangulo(primeira.pagina, primeira.rect);
+  }
+
+  private atualizarBarra: () => void = () => undefined;
+
+  descartarSugestoes(): void {
+    this.sugestoes = [];
+    this.barraSugestoes?.remove();
+    this.barraSugestoes = null;
+    for (const e of document.querySelectorAll(".sugestao-campo")) e.remove();
+  }
+
+  private desenharSugestoes(p: PaginaVisor): void {
+    for (const e of p.extras.querySelectorAll(".sugestao-campo")) e.remove();
+    for (const item of this.sugestoes) {
+      if (item.s.pagina !== p.indice) continue;
+      const b = el("button", { classe: `sugestao-campo ${item.s.tipo}${item.ativa ? " ativa" : ""}`, type: "button",
+        title: `${item.s.tipo === "texto" ? "Campo de texto" : "Caixa de seleção"} (${item.s.motivo}) — clique para ${item.ativa ? "desmarcar" : "marcar"}` });
+      posicionar(b, p, item.s.rect);
+      b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        item.ativa = !item.ativa;
+        this.desenharSugestoes(p);
+        this.atualizarBarra();
+      });
+      p.extras.append(b);
+    }
   }
 
   /** Documento mudou de estrutura (paginas novas/removidas): esquece caches. */
   esquecer(): void {
     this.anotacoes.clear();
     this.campos.clear();
+    this.links.clear();
+    this.descartarSugestoes();
     this.selecao = null;
   }
 
@@ -337,7 +461,7 @@ export class Ferramentas {
       this.gestoCaneta(p, ev);
       return;
     }
-    if (f === "nota" || f === "texto" || f === "editarTexto") {
+    if (f === "nota" || f === "texto" || f === "editarTexto" || f === "carimbo") {
       const soltar = () => {
         p.camada.removeEventListener("pointerup", soltar);
         this.clique(p, pt.pagina);
@@ -449,6 +573,28 @@ export class Ferramentas {
         if (f === "assinatura") void this.definir("selecionar");
         return;
       }
+      case "recortar": {
+        if (!arrastou) return;
+        const total = this.c.visor.estado?.paginas.length ?? 1;
+        let quais: number[] = [i];
+        if (total > 1) {
+          const { valor } = await dialogo("Recortar", el("p", { textContent: "A área arrastada fica visível; o resto da página é escondido (CropBox). Aplicar em quais páginas?" }),
+            [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Todas as páginas", valor: "todas" }, { rotulo: "Só esta página", valor: "esta", primario: true }]);
+          if (valor === null || valor === "c") return;
+          if (valor === "todas") quais = [...Array(total).keys()];
+        }
+        await this.c.operar("recortarRetangulo", { indices: quais, rect });
+        return;
+      }
+      case "campoTexto": case "campoCaixa": {
+        let r: Retangulo = rect;
+        if (!arrastou) {
+          r = f === "campoTexto" ? [a[0], a[1] - 10, a[0] + 180, a[1] + 10] : [a[0] - 7, a[1] - 7, a[0] + 7, a[1] + 7];
+        }
+        const res = await this.c.operar("criarCampos", { campos: [{ pagina: i, tipo: f === "campoTexto" ? "texto" : "caixa", rect: r }] });
+        if (res !== FALHOU) avisar("Campo criado. Use Selecionar para preenchê-lo.", "ok");
+        return;
+      }
       default:
         return;
     }
@@ -509,6 +655,8 @@ export class Ferramentas {
       if (t) await this.c.operar("nota", { pagina: i, ponto: pt, texto: t, estilo });
     } else if (this.atual === "texto") {
       await this.dialogoTexto(i, pt);
+    } else if (this.atual === "carimbo") {
+      await this.c.operar("carimbo", { pagina: i, centro: pt, texto: this.carimboTexto, cor: estilo.cor });
     } else if (this.atual === "editarTexto") {
       const t = await this.c.motor.pedir<Trecho | null>("trechoEm", { pagina: i, ponto: pt }).catch(() => null);
       if (!t) {

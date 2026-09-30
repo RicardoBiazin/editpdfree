@@ -119,3 +119,91 @@ export function criarFormulario(): Uint8Array {
   }));
   return bytesDoBuffer(doc.saveToBuffer(""));
 }
+
+/** PDF de uma pagina com uma imagem grande e ruidosa (comprime mal em Flate),
+ *  metade de cima escura, ocupando a pagina inteira. */
+export function criarPdfComImagemGrande(w = 1800, h = 2400): Uint8Array {
+  const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [0, 0, w, h], false);
+  const px = pix.getPixels();
+  const stride = pix.getStride();
+  let semente = 12345;
+  const aleatorio = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) % 40);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const o = y * stride + x * 3;
+      const base = y < h / 2 ? 40 : 215;
+      px[o] = base + aleatorio(); px[o + 1] = base + aleatorio(); px[o + 2] = base + aleatorio();
+    }
+  }
+  const doc = new mupdf.PDFDocument();
+  const ref = doc.addImage(new mupdf.Image(pix));
+  doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, { XObject: { Im0: ref } }, "q 595 0 0 842 0 0 cm /Im0 Do Q"));
+  return bytesDoBuffer(doc.saveToBuffer("compress=yes"));
+}
+
+/** PDF com titulo grande, texto em negrito/italico e lista. */
+export function pdfEstruturado(linhaExtra?: string): Uint8Array {
+  const doc = new mupdf.PDFDocument();
+  const f = (nome: string) => doc.addObject({ Type: "Font", Subtype: "Type1", BaseFont: nome, Encoding: "WinAnsiEncoding" });
+  const res = doc.addObject({ Font: { R: f("Helvetica"), B: f("Helvetica-Bold"), I: f("Helvetica-Oblique") } });
+  const hex = (t: string) => "<" + [...t].map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("") + ">";
+  const linhas: [string, number, number, string][] = [
+    ["B", 24, 780, "Relatório Anual"],
+    ["R", 11, 740, "Este parágrafo tem texto corrido suficiente para ser o corpo."],
+    ["R", 11, 726, "Continua na linha de baixo com mais palavras normais."],
+    ["B", 11, 700, "Importante:"],
+    ["R", 11, 680, "• primeiro item"],
+    ["R", 11, 666, "• segundo item"],
+    ["I", 11, 640, "nota em itálico"],
+  ];
+  if (linhaExtra) linhas.splice(3, 0, ["R", 11, 712, linhaExtra]);
+  const conteudo = linhas.map(([fn, t, y, s]) => `BT /${fn} ${t} Tf 72 ${y} Td ${hex(s.replace("•", "\x95"))} Tj ET`).join("\n");
+  doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, res, conteudo));
+  doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, res, `BT /R 11 Tf 72 780 Td ${hex("Segunda página.")} Tj ET`));
+  return bytesDoBuffer(doc.saveToBuffer(""));
+}
+
+
+/** "Escaneia" um PDF de texto: cada pagina vira so' uma imagem. */
+export function escanear(bytes: Uint8Array, escala = 2): Uint8Array {
+  const orig = mupdf.Document.openDocument(bytes, "application/pdf");
+  const doc = new mupdf.PDFDocument();
+  for (let i = 0; i < orig.countPages(); i++) {
+    const p = orig.loadPage(i);
+    const b = p.getBounds();
+    const pix = p.toPixmap(mupdf.Matrix.scale(escala, escala), mupdf.ColorSpace.DeviceGray, false);
+    const ref = doc.addImage(new mupdf.Image(pix));
+    const w = b[2] - b[0], h = b[3] - b[1];
+    doc.insertPage(-1, doc.addPage([0, 0, w, h], 0, { XObject: { Im: ref } }, `q ${w} 0 0 ${h} 0 0 cm /Im Do Q`));
+  }
+  return bytesDoBuffer(doc.saveToBuffer("compress=yes"));
+}
+
+
+function hexWin(t: string): string {
+  return "<" + codificarWinAnsi(t).map((b) => b.toString(16).padStart(2, "0")).join("") + ">";
+}
+
+/** Ficha para preencher: "Nome: ______", "Cidade:" com espaco, um quadrado
+ *  desenhado ao lado de "Aceito" e uma linha de texto comum. */
+export function ficha(): Uint8Array {
+  const doc = new mupdf.PDFDocument();
+  const f = doc.addObject({ Type: "Font", Subtype: "Type1", BaseFont: "Helvetica", Encoding: "WinAnsiEncoding" });
+  const c = [
+    `BT /F1 12 Tf 72 760 Td ${hexWin("Nome: ______________________")} Tj ET`,
+    `BT /F1 12 Tf 72 720 Td ${hexWin("Cidade:")} Tj ET`,
+    `0 G 1 w 72 680 10 10 re S`,
+    `BT /F1 12 Tf 90 681 Td ${hexWin("Aceito os termos")} Tj ET`,
+    `BT /F1 12 Tf 72 640 Td ${hexWin("Texto comum sem campo nenhum aqui")} Tj ET`,
+  ].join("\n");
+  doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, { Font: { F1: f } }, c));
+  return bytesDoBuffer(doc.saveToBuffer(""));
+}
+
+
+/** PDF sem a tabela xref nem o trailer (cortado no fim). */
+export function pdfTruncado(): Uint8Array {
+  const inteiro = criarPdf([{ linhas: ["Página A"] }, { linhas: ["Página B"] }, { linhas: ["Página C"] }]);
+  const corte = new TextDecoder("latin1").decode(inteiro).lastIndexOf("xref");
+  return inteiro.slice(0, corte);
+}

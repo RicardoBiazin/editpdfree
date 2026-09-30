@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as mupdf from "mupdf";
-import { criarFormulario } from "../test/fixtures.ts";
+import { criarFormulario, criarPdf, criarPdfComImagemGrande, escanear, ficha, pdfEstruturado, pdfTruncado, pngTeste } from "../test/fixtures.ts";
 
 // --url=https://... roda contra um site ja' publicado (com o portao), sem
 // subir servidor local: e' a conferencia depois do deploy.
@@ -74,10 +74,19 @@ const baixado = async (nome, ms = 10000) => {
 };
 // Perfil do Chrome fora do projeto (o `vite dev` vigia a pasta do projeto).
 const perfil = join(tmpdir(), "editpdfree-fumaca-perfil");
+// Arquivos de teste gerados na hora (para os seletores de arquivo do app).
+const PASTA_FIXTURES = join(tmpdir(), "editpdfree-fumaca-arquivos") + "/";
+rmSync(PASTA_FIXTURES, { recursive: true, force: true });
+mkdirSync(PASTA_FIXTURES, { recursive: true });
+writeFileSync(PASTA_FIXTURES + "estruturado.pdf", pdfEstruturado());
+writeFileSync(PASTA_FIXTURES + "ficha.pdf", ficha());
+writeFileSync(PASTA_FIXTURES + "escaneado.pdf", escanear(criarPdf([{ linhas: ["Contrato de prestação de serviços", "Valor total 1234 reais"] }])));
+const pdfEstruturadoB = () => pdfEstruturado("Linha nova só na versão B.");
 // Perfil limpo a cada rodada: sem cookie do portao nem cache de service worker.
 rmSync(perfil, { recursive: true, force: true });
 const nav = spawn(chrome, ["--headless=new", "--remote-debugging-port=9333", `--user-data-dir=${perfil}`,
-  "--no-first-run", "--no-default-browser-check", "--disable-component-update", "--window-size=1280,900", "about:blank"], { stdio: "ignore" });
+  "--no-first-run", "--no-default-browser-check", "--disable-component-update",
+  "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--window-size=1280,900", "about:blank"], { stdio: "ignore" });
 let alvo;
 for (let i = 0; i < 50 && !alvo; i++) {
   try {
@@ -92,6 +101,8 @@ const ws = new WebSocket(alvo.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener("open", r, { once: true }));
 let seq = 0;
 const pend = new Map();
+let arquivoParaEscolher = null;
+const externas = [];
 const erros = [];
 ws.addEventListener("message", (ev) => {
   const m = JSON.parse(ev.data);
@@ -101,6 +112,14 @@ ws.addEventListener("message", (ev) => {
     if (m.error) no(new Error(m.error.message)); else res(m.result);
   } else if (m.method === "Runtime.consoleAPICalled" && ["error", "assert"].includes(m.params.type)) {
     erros.push("console: " + m.params.args.map((a) => a.value ?? a.description).join(" "));
+  } else if (m.method === "Network.requestWillBeSent") {
+    const u = m.params.request.url;
+    if (!/^(data:|blob:|about:|chrome|devtools)/.test(u) && !u.startsWith(new URL(URL_APP).origin)) externas.push(u);
+  } else if (m.method === "Page.fileChooserOpened") {
+    // Seletor de arquivo do app: responde com o arquivo preparado pelo roteiro.
+    const alvo = arquivoParaEscolher;
+    arquivoParaEscolher = null;
+    if (alvo) void cdp("DOM.setFileInputFiles", { files: [alvo], backendNodeId: m.params.backendNodeId }).catch(() => undefined);
   } else if (m.method === "Runtime.exceptionThrown") {
     erros.push("exceção: " + (m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text));
   } else if (m.method === "Log.entryAdded" && m.params.entry.level === "error") {
@@ -114,7 +133,9 @@ const cdp = (method, params = {}, ms = 15000) => new Promise((res, no) => {
   ws.send(JSON.stringify({ id, method, params }));
 });
 const avaliar = async (expr) => {
-  const r = await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }, 5000);
+  // userGesture: o app abre seletores de arquivo com input.click(), que o
+  // Chrome so' permite com "ativacao do usuario".
+  const r = await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true, userGesture: true }, 5000);
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
   return r.result.value;
 };
@@ -130,6 +151,21 @@ const captura = async (nome) => {
   const { data } = await cdp("Page.captureScreenshot", { format: "png" });
   writeFileSync(new URL(nome, SAIDA), Buffer.from(data, "base64"));
 };
+/** Rola o visor para o ponto (x, y em pontos PDF da pagina `i`) ficar no meio
+ *  da tela e devolve as coordenadas de tela dele. */
+/** Rola o visor para os pontos (em pontos PDF da pagina `i`) ficarem no meio
+ *  da tela e devolve as coordenadas de tela de cada um (uma rolagem so'). */
+const pontosPagina = async (i, pts) => avaliar(`(() => {
+  const pts = ${JSON.stringify(pts)};
+  const p = document.querySelectorAll('.pagina')[${i}];
+  let r = p.getBoundingClientRect();
+  const s = r.width / Number(p.dataset.larguraPt);
+  const meio = pts.reduce((a, q) => a + q[1], 0) / pts.length;
+  document.getElementById("visor").scrollBy(0, r.top + meio * s - window.innerHeight / 2);
+  r = p.getBoundingClientRect();
+  return pts.map(([x, y]) => [r.left + x * s, r.top + y * s]);
+})()`);
+const pontoPagina = async (i, x, y) => (await pontosPagina(i, [[x, y]]))[0];
 const clicar = async (x, y) => {
   await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
   await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
@@ -153,6 +189,8 @@ try {
   await cdp("Log.enable");
   await cdp("Page.enable");
   await cdp("Network.enable");
+  await cdp("Page.setInterceptFileChooserDialog", { enabled: true });
+  await cdp("DOM.enable");
   await cdp("Browser.grantPermissions", { permissions: [] }).catch(() => undefined);
   rmSync(PASTA_DOWNLOADS, { recursive: true, force: true });
   mkdirSync(PASTA_DOWNLOADS, { recursive: true });
@@ -302,8 +340,7 @@ try {
   await arrastar(bc[0] + bc[2] * 0.2, bc[1] + bc[3] * 0.6, bc[0] + bc[2] * 0.7, bc[1] + bc[3] * 0.3);
   await confirmarDialogo();
   ok(await aguardar(`!document.querySelector("dialog[open]")`), "assinatura: diálogo fechou");
-  q = await pg3();
-  await clicar(q[0] + 150 * q[2], q[1] + 380 * q[2]);
+  await clicar(...(await pontoPagina(2, 150, 380)));
   ok(await desfazerDiz("Assinatura"), "assinatura posicionada na página");
   ok(await avaliar(`(() => { try { return !!localStorage.getItem("editpdfree.assinatura"); } catch { return false; } })()`),
     "assinatura lembrada no navegador");
@@ -314,11 +351,17 @@ try {
   await avaliar(`document.querySelectorAll('.pagina')[2].scrollIntoView(), true`);
   await espera(300);
   await avaliar(`document.querySelector('[data-ferramenta="caneta"]').click(), true`);
+  {
+    const [[ax, ay], [bx, by]] = await pontosPagina(2, [[350, 380], [500, 420]]);
+    await arrastar(ax, ay, bx, by);
+  }
   q = await pg3();
-  await arrastar(q[0] + 350 * q[2], q[1] + 380 * q[2], q[0] + 500 * q[2], q[1] + 420 * q[2]);
   ok(await desfazerDiz("Desenho à mão livre"), "caneta desenhou");
   await avaliar(`document.querySelector('[data-ferramenta="destacar"]').click(), true`);
-  await arrastar(q[0] + 60 * q[2], q[1] + 60 * q[2], q[0] + 300 * q[2], q[1] + 90 * q[2]);
+  {
+    const [[ax, ay], [bx, by]] = await pontosPagina(2, [[60, 60], [300, 90]]);
+    await arrastar(ax, ay, bx, by);
+  }
   ok(await desfazerDiz("Destacar texto"), "destaque sobre o texto editado");
   await avaliar(`document.querySelector('[data-ferramenta="selecionar"]').click(), true`);
 
@@ -412,6 +455,156 @@ try {
   await confirmarDialogo();
   ok(await aguardar(`document.title.includes("secreto.pdf") && document.querySelectorAll(".pagina").length === 1`), "senha certa: PDF aberto");
 
+
+  // ================================================================ 0.2
+  await avaliar(`window.onbeforeunload = null; true`);
+  const salvarFixture = (nome, bytes) => { const c = PASTA_FIXTURES + nome; writeFileSync(c, bytes); return c; };
+  const abrirArquivoNoApp = async (bytes, nome) => {
+    await abrirBytes(bytes, nome);
+    if (await aguardar(`!!document.querySelector("dialog[open] button.primario")?.textContent.includes("Abrir mesmo assim")`, 1500)) {
+      await confirmarDialogo();
+    }
+    return aguardar(`document.title.includes(${JSON.stringify(nome.replace(/\.[^.]+$/, ""))})`, 20000);
+  };
+  const menu = (acao) => avaliar(`(() => { const b = document.querySelector('[data-acao="${acao}"]'); b.click(); return true; })()`);
+
+  // ---- abrir DOCX/TXT (conversão pelo MuPDF)
+  ok(await abrirArquivoNoApp(new TextEncoder().encode("Ata da reunião\nsegunda linha"), "ata.txt"), "abrir .txt converte para PDF");
+  ok(await avaliar(`document.title.includes("ata.pdf")`), "documento convertido ganha nome .pdf");
+
+  // ---- comprimir
+  ok(await abrirArquivoNoApp(criarPdfComImagemGrande(), "foto.pdf"), "abriu PDF com imagem grande");
+  await menu("comprimir");
+  await aguardar(`!!document.querySelector("dialog[open] select")`);
+  await noDialogo(`d.querySelector("select").value = "forte"`);
+  await confirmarDialogo();
+  ok(await aguardar(`(document.querySelector("dialog[open]")?.textContent ?? "").includes("→")`, 30000), "comprimir mostra tamanho antes → depois");
+  ok(await avaliar(`/\\d+% menor/.test(document.querySelector("dialog[open]").textContent)`), "comprimir: arquivo ficou menor");
+  const txtComp = await avaliar(`document.querySelector("dialog[open]").textContent`);
+  console.log("     (" + txtComp.match(/[\d,.]+ (?:KB|MB|bytes) → [\d,.]+ (?:KB|MB|bytes)[^.]*/)?.[0] + ")");
+  await confirmarDialogo();
+  ok(await desfazerDiz("Comprimir"), "comprimir entra no desfazer");
+
+  // ---- exportar como imagens, docx, markdown, imagens embutidas
+  await menu("exportarImagens");
+  await aguardar(`!!document.querySelector("dialog[open]")`);
+  await confirmarDialogo();
+  const zipImg = await baixado("foto_imagens.zip", 20000);
+  ok(!!zipImg && zipImg.readUInt32LE(zipImg.length - 22) === 0x06054b50, "exportar páginas: ZIP com as imagens");
+  await menu("imagensEmbutidas");
+  ok(!!(await baixado("foto_imagens_embutidas.zip", 20000)), "extrair imagens embutidas: ZIP");
+  ok(await abrirArquivoNoApp(readFileSync(PASTA_FIXTURES + "estruturado.pdf"), "estruturado.pdf"), "abriu PDF de texto");
+  await menu("docx");
+  const docx = await baixado("estruturado.docx", 20000);
+  ok(!!docx && /Relatório/.test(mupdf.Document.openDocument(docx, "x.docx").loadPage(0).toStructuredText().asText()),
+    "converter para Word: .docx que reabre com o texto");
+  await menu("markdown");
+  const md = await baixado("estruturado.md", 20000);
+  ok(!!md && /^# Relatório Anual/m.test(md.toString("utf8")), "converter para Markdown: título vira #");
+
+  // ---- recortar (ferramenta) e carimbo
+  const antesCrop = await avaliar(`(() => { const p = document.querySelector('.pagina'); return p.offsetWidth / p.offsetHeight; })()`);
+  await avaliar(`document.querySelectorAll('.pagina')[0].scrollIntoView(), true`);
+  await espera(300);
+  await avaliar(`document.querySelector('[data-ferramenta="recortar"]').click(), true`);
+  let q1 = await avaliar(`(() => { const b = document.querySelector('.pagina').getBoundingClientRect(); return [b.left, b.top, b.width / 595]; })()`);
+  await arrastar(q1[0] + 40 * q1[2], q1[1] + 30 * q1[2], q1[0] + 400 * q1[2], q1[1] + 330 * q1[2]);
+  if (await aguardar(`!!document.querySelector("dialog[open] button.primario")`, 2000)) await confirmarDialogo();
+  ok(await desfazerDiz("Recortar"), "recortar pela área arrastada");
+  const depoisCrop = await avaliar(`(() => { const p = document.querySelector('.pagina'); return p.offsetWidth / p.offsetHeight; })()`);
+  ok(Math.abs(depoisCrop - 360 / 300) < 0.05 && Math.abs(antesCrop - depoisCrop) > 0.2, `página recortada (${antesCrop.toFixed(2)} → ${depoisCrop.toFixed(2)})`);
+  await avaliar(`document.querySelector('[data-ferramenta="carimbo"]').click(), true`);
+  ok(await aguardar(`!!document.querySelector("dialog[open] select")`), "carimbo: escolher o texto");
+  await confirmarDialogo();
+  q1 = await avaliar(`(() => { const b = document.querySelector('.pagina').getBoundingClientRect(); return [b.left, b.top, b.width / 360]; })()`);
+  await clicar(q1[0] + 180 * q1[2], q1[1] + 200 * q1[2]);
+  ok(await desfazerDiz("Carimbo"), "carimbo aplicado");
+  await avaliar(`document.querySelector('[data-ferramenta="selecionar"]').click(), true`);
+
+  // ---- propriedades e substituir
+  await menu("propriedades");
+  await aguardar(`!!document.querySelector("dialog[open] input")`);
+  await noDialogo(`d.querySelector("input").value = "Relatório de teste"`);
+  await confirmarDialogo();
+  ok(await desfazerDiz("Propriedades do documento"), "propriedades gravadas");
+  await menu("substituir");
+  await aguardar(`!!document.querySelector("dialog[open] input")`);
+  await noDialogo(`const i = d.querySelectorAll("input"); i[0].value = "primeiro item"; i[1].value = "item trocado"`);
+  await confirmarDialogo();
+  ok(await desfazerDiz("Substituir texto"), "substituir texto em todo o documento");
+
+  // ---- comparar
+  const pdfB = salvarFixture("versao-b.pdf", pdfEstruturadoB());
+  arquivoParaEscolher = pdfB;
+  await menu("comparar");
+  ok(await aguardar(`!!document.querySelector(".comparacao")`, 20000), "comparar: tela lado a lado abriu");
+  ok(await aguardar(`document.querySelectorAll(".item-dif").length >= 1`), "comparar: lista de diferenças");
+  ok(await aguardar(`document.querySelectorAll(".marca-dif.inserido").length >= 1 && document.querySelectorAll(".comparacao canvas").length >= 2`),
+    "comparar: realces verdes no documento B");
+  await avaliar(`document.querySelector(".item-dif").click(), true`);
+  await espera(500);
+  await captura("fumaca-8-comparar.png");
+  await tecla("Escape", "Escape", 0, 27);
+  ok(await aguardar(`!document.querySelector(".comparacao")`), "comparar: Esc fecha");
+
+  // ---- reparar
+  arquivoParaEscolher = salvarFixture("danificado.pdf", pdfTruncado());
+  await menu("reparar");
+  ok(await aguardar(`(document.querySelector("dialog[open]")?.textContent ?? "").includes("recuperada")`, 20000), "reparar: relatório de páginas recuperadas");
+  await confirmarDialogo();
+  ok(!!(await baixado("danificado_reparado.pdf")), "reparar: baixou o arquivo reparado");
+
+  // ---- formulário: detectar e criar; campo por clique
+  ok(await abrirArquivoNoApp(readFileSync(PASTA_FIXTURES + "ficha.pdf"), "ficha.pdf"), "abriu a ficha");
+  await menu("detectarCampos");
+  ok(await aguardar(`document.querySelectorAll(".sugestao-campo").length === 3`), "detectar campos: 3 sugestões na página");
+  await avaliar(`document.querySelector(".barra-sugestoes button.primario").click(), true`);
+  ok(await aguardar(`document.querySelectorAll(".campo-form").length === 3`, 20000), "sugestões viraram campos preenchíveis");
+  await avaliar(`document.querySelector('[data-ferramenta="campoTexto"]').click(), true`);
+  await clicar(...(await pontoPagina(0, 300, 400)));
+  ok(await aguardar(`document.querySelectorAll(".campo-form").length === 4`, 20000), "campo de texto criado com um clique");
+  await avaliar(`document.querySelector('[data-ferramenta="selecionar"]').click(), true`);
+
+  // ---- marca d'água de imagem
+  arquivoParaEscolher = salvarFixture("logo.png", pngTeste(60, 30, true));
+  await menu("marcaImagem");
+  ok(await aguardar(`!!document.querySelector("dialog[open] input[type=range]")`), "marca d’água de imagem: diálogo");
+  await confirmarDialogo();
+  ok(await desfazerDiz("Marca d’água de imagem"), "marca d’água de imagem aplicada");
+
+  // ---- OCR de um PDF escaneado
+  ok(await abrirArquivoNoApp(readFileSync(PASTA_FIXTURES + "escaneado.pdf"), "escaneado.pdf"), "abriu PDF escaneado (só imagem)");
+  await menu("ocr");
+  await aguardar(`!!document.querySelector("dialog[open] select")`);
+  await confirmarDialogo();
+  const t0 = Date.now();
+  ok(await aguardar(`(document.querySelector(".avisos")?.textContent ?? "").includes("Texto reconhecido")`, 120000),
+    "OCR: texto reconhecido (tesseract.js servido pelo próprio site)");
+  console.log(`     (OCR: ${Date.now() - t0} ms)`);
+  await tecla("f", "KeyF", 2, 70);
+  await avaliar(`(() => { const i = document.getElementById("inBusca"); i.value = "prestação"; i.dispatchEvent(new Event("input")); return true; })()`);
+  ok(await aguardar(`document.getElementById("contagemBusca").textContent === "1 de 1"`), "OCR: a palavra reconhecida é encontrada pela busca");
+  await avaliar(`document.getElementById("btBuscaFechar").click(), true`);
+
+  // ---- digitalizar com a câmera (câmera falsa do Chrome)
+  await avaliar(`window.onbeforeunload = null; true`);
+  await menu("camera");
+  if (await aguardar(`!!document.querySelector("dialog[open] button.primario")?.textContent.includes("Abrir mesmo assim")`, 1500)) {
+    // (o aviso de alterações só aparece ao abrir o PDF, no fim)
+  }
+  ok(await aguardar(`(() => { const v = document.querySelector(".camera-video"); return !!v && v.videoWidth > 0; })()`, 15000), "câmera: prévia ao vivo");
+  await avaliar(`document.querySelector(".camera-capturar").click(), true`);
+  ok(await aguardar(`document.querySelectorAll(".camera-pagina").length === 1`), "câmera: página capturada");
+  await avaliar(`document.querySelector(".camera-capturar").click(), true`);
+  ok(await aguardar(`document.querySelectorAll(".camera-pagina").length === 2`), "câmera: segunda página");
+  await captura("fumaca-9-camera.png");
+  await avaliar(`document.querySelector(".camera-botoes button.primario").click(), true`);
+  if (await aguardar(`!!document.querySelector("dialog[open] button.primario")?.textContent.includes("Abrir mesmo assim")`, 3000)) {
+    await confirmarDialogo();
+  }
+  ok(await aguardar(`document.title.includes("digitalizacao-") && document.querySelectorAll(".pagina").length === 2`, 20000),
+    "câmera: PDF de 2 páginas criado e aberto");
+
   // Service worker e modo offline.
   if (!DEV) {
   ok(await aguardar(`navigator.serviceWorker.getRegistration().then(r => !!(r && r.active))`, 20000), "service worker ativo");
@@ -437,6 +630,8 @@ try {
   // Avisos esperados do modo offline (a rede foi cortada de proposito).
   const reais = erros.filter((e) => !/ERR_INTERNET_DISCONNECTED|Failed to fetch|net::ERR/.test(e));
   ok(reais.length === 0, `nenhum erro no console (${reais.length})`);
+  ok(externas.length === 0, `nenhuma requisição a outro site (${externas.length})`);
+  for (const u of externas.slice(0, 10)) console.log("    ", u);
   for (const e of reais) console.log("   ", e);
   ws.close();
   nav.kill();

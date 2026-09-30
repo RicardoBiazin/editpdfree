@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 const pacote = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 
@@ -28,13 +28,15 @@ function serviceWorker(): Plugin {
       const publico = join(process.cwd(), "public");
       const doPublico = arquivosDe(publico)
         .map((c) => "/" + relative(publico, c).split("\\").join("/"))
-        .filter((c) => !/^\/(robots\.txt|_headers|_redirects)$/.test(c));
+        // O OCR (~6 MB por idioma + nucleo) NAO entra no precache: so' e' baixado
+        // quando o usuario usa o OCR, e o service worker guarda na primeira vez.
+        .filter((c) => !/^\/(robots\.txt|_headers|_redirects)$/.test(c) && !c.startsWith("/ocr/"));
       const doBuild = Object.keys(bundle).filter((n) => !n.endsWith(".map") && n !== "index.html")
         .map((n) => "/" + n);
       const lista = ["/", ...doBuild, ...doPublico].sort();
       const h = createHash("sha256");
       for (const n of lista) h.update(n);
-      for (const c of arquivosDe(publico)) h.update(readFileSync(c));
+      for (const c of arquivosDe(publico)) if (!c.includes(`${sep}ocr${sep}`)) h.update(readFileSync(c));
       for (const n of Object.keys(bundle)) {
         const b = bundle[n];
         h.update(b.type === "chunk" ? b.code : typeof b.source === "string" ? b.source : Buffer.from(b.source));

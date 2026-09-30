@@ -77,9 +77,52 @@ export function imagemParaPdf(bytes: Uint8Array): mupdf.PDFDocument {
   return doc;
 }
 
-/** Abre bytes como PDF (ou imagem convertida). Levanta SenhaNecessaria. */
+// ------------------------------------------------------------ outros formatos -> PDF
+
+export const EXTENSOES_DOCUMENTO = /\.(docx|xlsx|pptx|txt|text|html?|xhtml|epub|xps|oxps|fb2|cbz|svg|md)$/i;
+
+const MAGICO: Record<string, string> = {
+  md: "text/plain", text: "text/plain",
+};
+
+export function ehDocumentoConvertivel(nome: string): boolean {
+  return EXTENSOES_DOCUMENTO.test(nome);
+}
+
+/** Diagrama um documento (Office, HTML, EPUB, TXT...) e o grava como PDF. */
+export function paraPdf(bytes: Uint8Array, nome: string): Uint8Array {
+  const ext = (/\.([^.]+)$/.exec(nome)?.[1] ?? "").toLowerCase();
+  let doc: mupdf.Document;
+  try {
+    doc = mupdf.Document.openDocument(bytes, MAGICO[ext] ?? nome.toLowerCase());
+  } catch (e) {
+    throw new Error(`Não foi possível ler “${nome}” (${(e as Error).message}).`);
+  }
+  try {
+    const n = doc.countPages();
+    if (n < 1) throw new Error(`“${nome}” não tem conteúdo para converter.`);
+    const buf = new mupdf.Buffer();
+    const w = new mupdf.DocumentWriter(buf, "pdf", "compress");
+    for (let i = 0; i < n; i++) {
+      const p = doc.loadPage(i);
+      const dev = w.beginPage(p.getBounds());
+      p.run(dev, mupdf.Matrix.identity);
+      w.endPage();
+    }
+    w.close();
+    return bytesDoBuffer(buf);
+  } finally {
+    doc.destroy();
+  }
+}
+
+/** Abre bytes como PDF (ou imagem/documento convertido). Levanta SenhaNecessaria. */
 export function abrirComoPdf(bytes: Uint8Array, nome = "", senha?: string,
   tipo = ""): { doc: mupdf.PDFDocument; senhaUsada: string | null } {
+  // Documento antes de imagem: SVG chega com tipo image/svg+xml, mas e' diagramado.
+  if (ehDocumentoConvertivel(nome)) {
+    return { doc: mupdf.Document.openDocument(paraPdf(bytes, nome), "application/pdf").asPDF()!, senhaUsada: null };
+  }
   if (ehImagem(nome, tipo)) return { doc: imagemParaPdf(bytes), senhaUsada: null };
   let doc: mupdf.Document;
   try {
@@ -134,6 +177,10 @@ export class Sessao {
   /** undefined = manter como veio; null = sem protecao; objeto = proteger. */
   protecao: Protecao | null | undefined = undefined;
   modificado = false;
+  /** Depois de "Comprimir": gravar com deduplicacao e object streams. */
+  compactar = false;
+  /** O MuPDF precisou reparar o arquivo ao abrir. */
+  reparado = false;
   /** Aumenta a cada mudanca: a interface descarta renders antigos por ele. */
   versao = 0;
   private pilhaDesfazer: Instantaneo[] = [];
@@ -147,9 +194,14 @@ export class Sessao {
 
   static abrir(bytes: Uint8Array, nome: string, senha?: string, tipo = ""): Sessao {
     const { doc, senhaUsada } = abrirComoPdf(bytes, nome, senha, tipo);
-    const s = new Sessao(doc, ehImagem(nome, tipo) ? nome.replace(/\.[^.]+$/, "") + ".pdf" : nome,
-      senhaUsada);
-    if (ehImagem(nome, tipo)) s.modificado = true;
+    const convertido = ehImagem(nome, tipo) || ehDocumentoConvertivel(nome);
+    const s = new Sessao(doc, convertido ? nome.replace(/\.[^.]+$/, "") + ".pdf" : nome, senhaUsada);
+    if (convertido) s.modificado = true;
+    try {
+      s.reparado = doc.wasRepaired();
+    } catch {
+      s.reparado = false;
+    }
     return s;
   }
 
@@ -165,6 +217,13 @@ export class Sessao {
   /** Bytes do estado atual, sem criptografia e sem compactar (rapido). */
   instantaneo(): Uint8Array {
     return bytesDoBuffer(this.doc.saveToBuffer("encrypt=none"));
+  }
+
+  /** Regrava e reabre o documento. Necessario depois de mexer direto nos
+   *  objetos de /Annots: o MuPDF guarda a lista de anotacoes da pagina ja'
+   *  carregada e nao ve o widget novo ate' reabrir. */
+  recarregar(): void {
+    this.restaurar(this.instantaneo());
   }
 
   private restaurar(bytes: Uint8Array): void {
@@ -237,7 +296,8 @@ export class Sessao {
 
   /** Opcoes de gravacao do MuPDF, com a criptografia certa. */
   opcoesGravar(): string {
-    const opcoes = ["garbage=compact", "compress=yes"];
+    const opcoes = this.compactar ? ["garbage=deduplicate", "compress=yes", "objstms=yes"]
+      : ["garbage=compact", "compress=yes"];
     let prot: Protecao | null = null;
     if (this.protecao === undefined) {
       if (this.senhaOriginal !== null) {
@@ -260,9 +320,24 @@ export class Sessao {
     return opcoes.join(",");
   }
 
+  /** Grava o arquivo final a partir de uma COPIA do documento. Gravar com
+   *  garbage=compact/deduplicate renumera os objetos do documento na
+   *  memoria, e referencias (PDFObject) guardadas antes passam a apontar para
+   *  o objeto errado -- conferido: "Comprimir" depois de medir o tamanho
+   *  falhava com "object is not a stream". O documento aberto nunca e'
+   *  gravado com coleta de lixo. */
+  gravarCopia(): Uint8Array {
+    const copia = mupdf.Document.openDocument(this.instantaneo(), "application/pdf").asPDF()!;
+    try {
+      return bytesDoBuffer(copia.saveToBuffer(this.opcoesGravar()));
+    } finally {
+      copia.destroy();
+    }
+  }
+
   /** Bytes do arquivo final, prontos para baixar. */
   salvar(): Uint8Array {
-    const bytes = bytesDoBuffer(this.doc.saveToBuffer(this.opcoesGravar()));
+    const bytes = this.gravarCopia();
     this.modificado = false;
     return bytes;
   }

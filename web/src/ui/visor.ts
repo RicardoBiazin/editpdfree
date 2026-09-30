@@ -122,6 +122,7 @@ export class Visor {
 
   private dimensionar(p: PaginaVisor): void {
     const w = p.info.largura * this.escalaCss, h = p.info.altura * this.escalaCss;
+    p.div.dataset.larguraPt = String(p.info.largura);
     p.div.style.width = `${w}px`;
     p.div.style.height = `${h}px`;
     p.desenho.setAttribute("viewBox", `0 0 ${w} ${h}`);

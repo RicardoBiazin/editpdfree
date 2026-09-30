@@ -9,9 +9,12 @@
 
 import type { Ponto } from "./coordenadas.ts";
 import type { Sessao } from "./documento.ts";
-import { escreverTexto, larguraTexto } from "./conteudo.ts";
+import * as mupdf from "mupdf";
+import { Acrescimo, escreverTexto, larguraTexto } from "./conteudo.ts";
+import { matrizPaginaParaConteudo } from "./coordenadas.ts";
+import { fmt, geometria } from "./documento.ts";
 import type { Cor } from "./anotacoes.ts";
-import { formatarNumero, POSICOES, type Posicao } from "./formatos.ts";
+import { dataDeHoje, formatarNumero, POSICOES, type Posicao } from "./formatos.ts";
 
 export { formatarNumero, POSICOES, type Posicao } from "./formatos.ts";
 
@@ -54,6 +57,8 @@ export interface OpcoesNumeracao {
   tamanho?: number;
   cor?: Cor;
   inicio?: number;
+  /** Data para {data} (padrao: hoje). */
+  data?: string;
   margem?: number;
 }
 
@@ -63,11 +68,12 @@ export function numerar(s: Sessao, op: OpcoesNumeracao = {}): void {
   if (!(posicao in POSICOES)) throw new Error("Posição inválida.");
   const tamanho = op.tamanho ?? 10, margem = op.margem ?? 24, inicio = op.inicio ?? 1;
   const total = s.paginas + inicio - 1;
-  formatarNumero(formato, 1, 1);
+  const extra = { arquivo: s.nome, data: op.data ?? dataDeHoje() };
+  formatarNumero(formato, 1, 1, extra);
   s.operacao("Numerar páginas", () => {
     for (let i = 0; i < s.paginas; i++) {
       const p = s.pagina(i);
-      const texto = formatarNumero(formato, i + inicio, total);
+      const texto = formatarNumero(formato, i + inicio, total, extra);
       const largura = larguraTexto(texto, "Helvetica", tamanho);
       const b = p.getBounds();
       const [vertical, horizontal] = posicao.split("-");
@@ -75,6 +81,55 @@ export function numerar(s: Sessao, op: OpcoesNumeracao = {}): void {
       const x = horizontal === "centro" ? (b[0] + b[2] - largura) / 2
         : horizontal === "esquerda" ? b[0] + margem : b[2] - margem - largura;
       escreverTexto(s, p, [x, y], texto, { tamanho, cor: op.cor ?? [0, 0, 0], fonte: "Helvetica" });
+    }
+  });
+}
+
+export interface OpcoesMarcaImagem {
+  opacidade?: number;
+  /** Largura da imagem como fracao da largura da pagina (0,05 a 1). */
+  escala?: number;
+  modo?: "centro" | "mosaico";
+  camada?: "sobre" | "sob";
+}
+
+/** Marca d'agua de imagem em todas as paginas: centrada ou em mosaico, por
+ *  cima ou por baixo do conteudo, com opacidade. Sai de pe' para o leitor em
+ *  pagina girada (a matriz e' montada no espaco pagina). */
+export function marcaDaguaImagem(s: Sessao, bytes: Uint8Array, op: OpcoesMarcaImagem = {}): void {
+  let img: mupdf.Image;
+  try {
+    img = new mupdf.Image(bytes);
+  } catch {
+    throw new Error("Não foi possível ler a imagem.");
+  }
+  const escala = Math.max(0.05, Math.min(1, op.escala ?? 0.5));
+  const opacidade = Math.max(0.02, Math.min(1, op.opacidade ?? 0.3));
+  const proporcao = img.getHeight() / img.getWidth();
+  s.operacao("Marca d’água de imagem", () => {
+    const ref = s.doc.addImage(img);
+    for (let i = 0; i < s.paginas; i++) {
+      const p = s.pagina(i);
+      const g = geometria(p);
+      const b = g.limites;
+      const w = (b[2] - b[0]) * escala, h = w * proporcao;
+      const posicoes: [number, number][] = [];
+      if (op.modo === "mosaico") {
+        const passoX = w * 1.5, passoY = h * 1.5;
+        for (let y = b[1] + h * 0.25; y < b[3]; y += passoY) {
+          for (let x = b[0] + w * 0.25; x < b[2]; x += passoX) posicoes.push([x, y]);
+        }
+      } else {
+        posicoes.push([(b[0] + b[2] - w) / 2, (b[1] + b[3] - h) / 2]);
+      }
+      const ac = new Acrescimo(s.doc, p);
+      const nome = ac.recurso("XObject", ref);
+      const gs = ac.opacidade(opacidade);
+      const ops = posicoes.map(([x, y]) => {
+        const cm = matrizPaginaParaConteudo(g, [w, 0, 0, -h, x, y + h]);
+        return `q ${cm.map(fmt).join(" ")} cm /${nome} Do Q`;
+      });
+      ac.gravar(`/${gs} gs\n${ops.join("\n")}`, op.camada === "sob");
     }
   });
 }

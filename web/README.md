@@ -2,17 +2,23 @@
 
 A versão web do [EditPDFree](https://github.com/RicardoBiazin/editpdfree): um editor de PDF gratuito e de código aberto, em português, que roda **inteiro no navegador**.
 
-**Seus arquivos não saem do seu computador.** O PDF é aberto, editado e salvo aqui mesmo, pelo [MuPDF](https://mupdf.com) compilado para WebAssembly ([MuPDF.js](https://www.npmjs.com/package/mupdf)). Não há servidor recebendo arquivos, nem analytics, nem requisição externa: fontes, ícones e o motor `.wasm` são servidos pelo próprio site. Depois da primeira visita o app funciona sem internet (PWA instalável).
+**Seus arquivos não saem do seu computador.** O PDF é aberto, editado e salvo aqui mesmo, pelo [MuPDF](https://mupdf.com) compilado para WebAssembly ([MuPDF.js](https://www.npmjs.com/package/mupdf)). Não há servidor recebendo arquivos, nem analytics, nem requisição externa: fontes, ícones, o motor `.wasm` e o OCR são servidos pelo próprio site. Depois da primeira visita o app funciona sem internet (PWA instalável).
+
+Versão **0.2.0**.
 
 ## O que faz
 
 **Abrir e salvar**
 - Abrir PDF pelo botão ou arrastando o arquivo para a janela; imagem (PNG, JPEG, GIF, BMP, TIFF, WebP) vira um PDF de uma página
+- **Word, Excel, PowerPoint (DOCX/XLSX/PPTX), HTML, EPUB, TXT, XPS, FB2, CBZ e SVG** também abrem: o MuPDF diagrama o documento e ele vira PDF
+- Arquivo danificado é reparado ao abrir (o app avisa); “Reparar um PDF danificado” grava uma cópia limpa e diz quantas páginas foram recuperadas
+- **Digitalizar com a câmera** (celular/tablet: câmera traseira): captura várias páginas, recorta as bordas da folha, realça o contraste (cinza, preto e branco ou cor), deixa reordenar/excluir e monta o PDF
 - PDF com senha: pede a senha; ao salvar, continua protegido com a mesma senha (a menos que você a remova)
 - Salvar baixa o PDF editado com o mesmo nome do original; opcionalmente com senha (AES-256)
 
 **Visualizar**
 - Rolagem contínua, zoom (botões, Ctrl+roda do mouse, Ctrl+/Ctrl−, ajustar à largura), indicador e salto de página, miniaturas
+- Painel de **marcadores** (índice do PDF) e **links** clicáveis (internos vão para a página; externos pedem confirmação)
 - Só as páginas visíveis são desenhadas, com cache limitado; o trabalho pesado roda num Web Worker e a tela não trava
 
 **Páginas** (sobre a página atual ou as miniaturas selecionadas com Ctrl/Shift+clique)
@@ -20,9 +26,11 @@ A versão web do [EditPDFree](https://github.com/RicardoBiazin/editpdfree): um e
 - Reordenar arrastando as miniaturas (no toque: segure e arraste)
 - Inserir outro PDF ou imagem (também soltando o arquivo sobre as miniaturas)
 - Extrair páginas para um novo PDF; dividir a cada N páginas ou por intervalos como `1-3, 5, 8-`, baixando um `.zip`
+- **Recortar**: arrastando a área que fica visível (ferramenta) ou por margens em milímetros, na página atual ou em todas — as margens valem como a página aparece na tela, mesmo girada
 
 **Anotações** — com cor, espessura e opacidade
 - Caixa de texto, nota, destacar/sublinhar/tachar (arraste sobre o texto: uma marcação por linha, só nas palavras tocadas), caneta à mão livre, retângulo, elipse, linha, seta
+- **Carimbos** (APROVADO, PAGO, CÓPIA, CONFIDENCIAL… ou um texto seu), de pé em qualquer rotação da página
 - Selecionar uma anotação para movê-la (arrastar) ou excluí-la (Delete ou o botão “Excluir”)
 
 **Documento**
@@ -30,9 +38,19 @@ A versão web do [EditPDFree](https://github.com/RicardoBiazin/editpdfree): um e
 - **Tarja de verdade**: arraste sobre a área e o texto e os pixels de imagem embaixo são **removidos do arquivo** — não é um retângulo preto por cima. Também “tarjar todas as ocorrências de um texto” (um CPF, por exemplo)
 - Localizar (Ctrl+F) com realce dos resultados e anterior/próximo (sem diferenciar maiúsculas nem acentos)
 - Preencher formulários existentes: texto, caixa de seleção, opção, lista
+- **Criar campos** de texto e caixas de seleção arrastando na página, e **detectar campos** automaticamente (sequências de `____`, rótulos terminados em “:” com espaço livre depois, quadradinhos vazios): as sugestões aparecem na página para você desmarcar o que não quiser antes de criar
 - Adicionar texto no conteúdo da página (Helvetica, Times ou Courier)
 - **Editar uma linha de texto existente**: clique na linha, altere o texto, o tamanho e a cor
-- Marca d’água e numeração de páginas; extrair o texto para `.txt`
+- **Substituir um texto em todo o documento** (cada ocorrência é apagada de verdade e reescrita no mesmo lugar)
+- Marca d’água de texto e **de imagem** (opacidade, centralizada ou em mosaico, por cima ou por baixo do conteúdo)
+- Numeração, **cabeçalho e rodapé** com `{n}`, `{total}`, `{arquivo}` e `{data}`
+- **Propriedades** (título, autor, assunto, palavras-chave)
+
+**Ferramentas**
+- **Comprimir** (leve, média ou forte): reamostra as imagens maiores que o necessário, regrava como JPEG só quando fica menor, enxuga fontes e objetos repetidos; mostra o tamanho antes → depois
+- **Reconhecer texto (OCR)** em PDF escaneado, com o [tesseract.js](https://github.com/naptha/tesseract.js) (português e/ou inglês): o texto entra **invisível** na posição de cada palavra, então buscar, selecionar, copiar e tarjar passam a funcionar. Carregado só quando usado
+- **Comparar dois PDFs** palavra a palavra, no documento inteiro (não página contra página): os dois lado a lado, removido em vermelho, inserido em verde, e a lista clicável das diferenças
+- **Converter**: para Word (`.docx`), Markdown (`.md`, com títulos pelo tamanho da fonte, negrito/itálico, listas e separador de página), texto (`.txt`), páginas como JPG/PNG na resolução escolhida (`.zip`) e extrair as imagens embutidas no formato original (`.zip`)
 
 Desfazer/refazer (Ctrl+Z / Ctrl+Y) vale para todas as operações.
 
@@ -53,7 +71,11 @@ Opcionais, se houver Chrome ou Edge instalado (sem janela, via DevTools Protocol
 ```
 npm run fumaca          # abre o app de verdade e exercita abrir, anotar, mover, desfazer, girar,
                         # buscar, tarjar, editar texto, assinar, reordenar, dividir, formulário,
-                        # PDF com senha, salvar (e confere o arquivo baixado), modo offline e 390 px
+                        # PDF com senha, salvar (e confere o arquivo baixado), TXT->PDF, comprimir,
+                        # exportar imagens, Word, Markdown, recortar, carimbo, propriedades,
+                        # substituir, comparar, reparar, detectar/criar campos, marca d'água de
+                        # imagem, OCR, câmera (câmera falsa do Chrome), modo offline e 390 px;
+                        # e confere que nenhuma requisição saiu para outro site
 npm run fumaca:portao   # o mesmo, passando antes pelo portão anti-robô
 npm run fumaca -- --dev # contra o `vite dev`
 ```
@@ -71,13 +93,21 @@ Os testes geram os PDFs de teste na hora — não há arquivo binário de teste 
 | `src/sw-modelo.js` | Modelo do service worker; o build gera `dist/sw.js` com a lista exata dos arquivos |
 | `src/portao/`, `netlify/edge-functions/portao.ts` | O portão anti-robô |
 | `scripts/icones.mjs` | Gera os ícones (SVG, PNG e `favicon.ico`) sem dependência; roda em todo build |
+| `scripts/ocr-arquivos.mjs` | Copia o worker, o núcleo WASM e os idiomas do tesseract.js para `public/ocr/` (gerado, fora do git) |
 | `test/` | Testes (`node --test`) |
 
-Dependências: só `mupdf` (em tempo de execução), `vite` e `typescript` (desenvolvimento).
+Dependências em tempo de execução: `mupdf` (AGPL-3.0), `tesseract.js` (Apache-2.0, carregado só no OCR) e os idiomas `@tesseract.js-data/por` e `@tesseract.js-data/eng` (MIT; modelos do Tesseract, Apache-2.0). Desenvolvimento: `vite` e `typescript`.
 
 ## Publicar no Netlify
 
 O `netlify.toml` já configura: build `npm run build`, pasta `dist`, `.wasm` com `Content-Type: application/wasm`, cache longo para `/assets/*`, `sw.js` sem cache, e cabeçalhos de segurança — inclusive uma CSP que só permite script do próprio site mais `'wasm-unsafe-eval'` (necessário para o WebAssembly).
+
+**Mudanças de cabeçalho na 0.2:**
+- A **CSP não mudou.** O tesseract.js é criado com `workerBlobURL: false` (o worker vem de `/ocr/worker.min.js`, não de um `blob:`), o núcleo tem o `.wasm` embutido e roda com o `'wasm-unsafe-eval'` que já existia, e os idiomas vêm de `/ocr/lang/` (`connect-src 'self'`).
+- `Permissions-Policy`: `camera=()` passou a `camera=(self)` — necessário para “Digitalizar com a câmera”. Só o próprio site pode pedir a câmera, e o navegador ainda pergunta ao usuário.
+- `/ocr/*` com cache de 7 dias e `/ocr/lang/*` como `application/octet-stream` (os idiomas já são `.gz` e o tesseract os descompacta; não pode haver `Content-Encoding` por cima).
+
+**Tamanho:** o app em si tem ~75 KB de JS principal + ~145 KB do worker + o motor `.wasm` de ~10 MB (~3,6 MB comprimido). O OCR fica em `dist/ocr/` (~15 MB no disco, com 3 variantes do núcleo), mas só é baixado quando alguém usa o OCR: o worker (~27 KB comprimido), **uma** variante do núcleo (~1,1 MB comprimido) e o idioma (português ~1,4 MB; inglês ~2,9 MB). Não entra no pré-cache do service worker; fica guardado para uso offline depois do primeiro uso.
 
 ### Portão anti-robô
 
@@ -109,7 +139,16 @@ Para testar o portão localmente sem publicar: `npm run build && npm run portao:
 
 ## Limitações em relação ao desktop
 
-- Não tem (ainda): criar campos de formulário, achatar formulário, comprimir imagens, exportar páginas como PNG/JPG, editar título/autor, substituir um texto em todo o documento, escolher permissões ao proteger (com senha de proprietário informada, quem abre com a senha comum pode imprimir e copiar, mas não alterar; sem ela, a senha única libera tudo).
+- Não tem (ainda): achatar formulário, criar campos de lista/opção, editar marcadores, escolher permissões ao proteger (com senha de proprietário informada, quem abre com a senha comum pode imprimir e copiar, mas não alterar; sem ela, a senha única libera tudo).
+- **Assinatura digital com certificado não existe**: o MuPDF.js 1.28 não tem API de assinatura (conferido no `mupdf.d.ts`). A “Assinatura” do app é a imagem da sua assinatura.
+- **PDF → Word** é reconstrução aproximada (o MuPDF.js do npm vem sem o escritor DOCX, então o `.docx` é montado pelo app): parágrafos com fonte, tamanho, negrito/itálico e cor, imagens na ordem e quebra de página. Não reconstrói tabelas nem colunas.
+- **Office → PDF** tem a fidelidade de um leitor, não a do Word: tabelas complexas e fontes específicas podem mudar (sem LibreOffice no navegador).
+- **Comprimir** não mexe em imagens JPEG que já estão na resolução certa (regravar só perderia qualidade) e só troca uma imagem se o resultado ficar menor. Máscaras de transparência ficam como estavam.
+- **OCR**: só português e inglês; a qualidade depende da digitalização (~250 dpi internamente). Letras fora do Latin-1 viram “?” na camada de texto. Páginas que já têm texto são puladas.
+- **Detectar campos** é heurística: confira as sugestões antes de criar.
+- **Câmera**: recorte simples pelas bordas claras da folha sobre fundo mais escuro; não corrige perspectiva (fotografe de cima). Só em HTTPS/localhost.
+- **Comparar** compara o texto (palavras), não o desenho: imagens e formatação não entram na comparação.
+- **Carimbo**: a aparência é desenhada pelo app; outros leitores a mostram igual, mas se alguém “regenerar” a anotação noutro programa ela pode virar o carimbo padrão dele.
 - Salvar é **baixar**: o navegador não sobrescreve o arquivo original.
 - Texto novo e texto editado usam as fontes padrão do PDF (Helvetica, Times, Courier), com os caracteres do Latin-1 (acentos do português, aspas, travessão e euro funcionam; letras de outros alfabetos viram “?”). Só dá para editar texto horizontal. A fonte original quase sempre vem embutida só com as letras usadas e não serve para letras novas — a mesma limitação do desktop.
 - Duplicar uma página ou inserir outro PDF leva as anotações, mas **não** os campos de formulário nem os links internos da página copiada (dependem do documento de origem). Extrair e dividir preservam tudo.
@@ -131,7 +170,14 @@ Coisas que custaram um experimento e estão comentadas no código:
 - A busca diferencia maiúsculas por padrão (`ignore-case` e `ignore-diacritics` são opções).
 - `Buffer.asUint8Array()` e `Pixmap.getPixels()` são vistas da memória do WASM: copiar antes de guardar ou transferir.
 - A tarja usa `applyRedactions` com `REDACT_IMAGE_PIXELS` e `REDACT_LINE_ART_REMOVE_IF_TOUCHED` (como o desktop); editar texto redige só o texto da linha, com a caixa encolhida 20% na vertical para não morder as linhas vizinhas.
+- **Gravar com `garbage=` renumera os objetos do documento aberto** e deixa inválidas as referências (`PDFObject`) guardadas antes (“object is not a stream” no Comprimir). O arquivo final é gravado a partir de uma cópia (`Sessao.gravarCopia`); o documento aberto nunca passa por coleta de lixo.
+- O stream de um objeto é do objeto **indireto**: `readRawStream`/`writeRawStream` pela referência, não pelo `resolve()`.
+- Depois de pôr um widget direto no `/Annots`, a página já carregada não o enxerga: é preciso regravar e reabrir o documento (`Sessao.recarregar`).
+- `setPageBox("CropBox", r)` recebe o retângulo no espaço da página como o leitor vê e o converte sozinho.
+- Carimbo com aparência própria: `setContents` **antes** de `setAppearance` e nada de `update()` depois — senão o MuPDF redesenha o carimbo padrão (“DRAFT”) por cima.
+- O `.wasm` do npm abre DOCX/XLSX/PPTX/HTML/EPUB/TXT, mas não tem escritor DOCX nem OCR (“DOCX/ODT writer not enabled”, “No OCR support in this build”).
+- `page.search(texto, opções)` devolve no máximo 500 quads por página; “tarjar todas as ocorrências” repete a busca até não sobrar nenhuma.
 
 ## Licença
 
-[AGPL-3.0](../LICENSE), como o EditPDFree desktop. Código-fonte: <https://github.com/RicardoBiazin/editpdfree>. O motor de PDF é o MuPDF.js (AGPL-3.0), da Artifex Software.
+[AGPL-3.0](../LICENSE), como o EditPDFree desktop. Código-fonte: <https://github.com/RicardoBiazin/editpdfree>. O motor de PDF é o MuPDF.js (AGPL-3.0), da Artifex Software. O OCR usa o tesseract.js e o tesseract.js-core (Apache-2.0) e os modelos de idioma do Tesseract (Apache-2.0, empacotados pelo projeto tesseract.js-data sob MIT).

@@ -5,6 +5,7 @@
 
 const CACHE = "editpdfree-__VERSAO_CACHE__";
 const ARQUIVOS = __ARQUIVOS__;
+const CACHE_OCR = "editpdfree-ocr-v1";
 
 self.addEventListener("install", (ev) => {
   ev.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
@@ -12,7 +13,7 @@ self.addEventListener("install", (ev) => {
 
 self.addEventListener("activate", (ev) => {
   ev.waitUntil(caches.keys()
-    .then((nomes) => Promise.all(nomes.filter((n) => n.startsWith("editpdfree-") && n !== CACHE)
+    .then((nomes) => Promise.all(nomes.filter((n) => n.startsWith("editpdfree-") && n !== CACHE && n !== CACHE_OCR)
       .map((n) => caches.delete(n))))
     .then(() => self.clients.claim()));
 });
@@ -27,6 +28,15 @@ self.addEventListener("fetch", (ev) => {
     // Pagina: rede primeiro (pega versao nova), cache se estiver sem internet.
     ev.respondWith(fetch(req).catch(() => caches.match("/", { cacheName: CACHE })
       .then((r) => r || new Response("Sem conexão.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } }))));
+    return;
+  }
+  // OCR: baixado so' no primeiro uso e guardado num cache proprio (que
+  // sobrevive as atualizacoes do app; muda so' quando o tesseract mudar).
+  if (url.pathname.startsWith("/ocr/")) {
+    ev.respondWith(caches.open(CACHE_OCR).then((c) => c.match(req).then((r) => r || fetch(req).then((resp) => {
+      if (resp.ok) c.put(req, resp.clone());
+      return resp;
+    }))));
     return;
   }
   // Arquivos da aplicacao (nomes com hash): cache primeiro.

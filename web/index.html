@@ -53,19 +53,41 @@
           <button data-acao="dividir" data-icone="duplicar" role="menuitem">Dividir documento…</button>
         </div>
       </details>
+      <details class="menu" id="menuFerramentas" data-sempre>
+        <summary class="bt" data-icone="ferramentas"><span class="rotulo">Ferramentas</span></summary>
+        <div class="menu-itens" role="menu">
+          <button data-acao="comprimir" data-icone="salvar" role="menuitem">Comprimir…</button>
+          <button data-acao="reparar" data-icone="info" role="menuitem">Reparar um PDF danificado…</button>
+          <button data-acao="margens" data-icone="recortar" role="menuitem">Recortar margens…</button>
+          <hr>
+          <button data-acao="docx" data-icone="pagina" role="menuitem">Converter para Word (.docx)</button>
+          <button data-acao="markdown" data-icone="texto" role="menuitem">Converter para Markdown (.md)</button>
+          <button data-acao="extrairTexto" data-icone="texto" role="menuitem">Converter para texto (.txt)</button>
+          <button data-acao="exportarImagens" data-icone="imagem" role="menuitem">Exportar páginas como JPG/PNG…</button>
+          <button data-acao="imagensEmbutidas" data-icone="imagem" role="menuitem">Extrair imagens embutidas (.zip)</button>
+          <hr>
+          <button data-acao="comparar" data-icone="comparar" role="menuitem">Comparar dois PDFs…</button>
+          <button data-acao="ocr" data-icone="buscar" role="menuitem">Reconhecer texto (OCR)…</button>
+          <button data-acao="detectarCampos" data-icone="campoTexto" role="menuitem">Detectar campos de formulário</button>
+          <hr>
+          <button data-acao="camera" data-icone="camera" role="menuitem">Digitalizar com a câmera…</button>
+        </div>
+      </details>
       <details class="menu" id="menuDocumento">
         <summary class="bt" data-icone="menu"><span class="rotulo">Documento</span></summary>
         <div class="menu-itens" role="menu">
           <button data-acao="buscar" data-icone="buscar" role="menuitem">Localizar…</button>
+          <button data-acao="substituir" data-icone="editarTexto" role="menuitem">Substituir texto…</button>
           <button data-acao="tarjarTexto" data-icone="tarjar" role="menuitem">Tarjar todas as ocorrências de um texto…</button>
           <hr>
           <button data-acao="marcaDagua" data-icone="texto" role="menuitem">Marca d’água…</button>
-          <button data-acao="numerar" data-icone="pagina" role="menuitem">Numerar páginas…</button>
+          <button data-acao="marcaImagem" data-icone="imagem" role="menuitem">Marca d’água de imagem…</button>
+          <button data-acao="numerar" data-icone="pagina" role="menuitem">Numerar páginas, cabeçalho e rodapé…</button>
           <hr>
           <button data-acao="proteger" data-icone="cadeado" role="menuitem">Proteger com senha…</button>
           <button data-acao="removerSenha" data-icone="cadeado" role="menuitem">Remover senha</button>
           <hr>
-          <button data-acao="extrairTexto" data-icone="texto" role="menuitem">Extrair texto (.txt)</button>
+          <button data-acao="propriedades" data-icone="info" role="menuitem">Propriedades (título, autor…)</button>
           <button data-acao="sobre" data-icone="info" role="menuitem">Sobre o EditPDFree</button>
         </div>
       </details>
@@ -94,7 +116,12 @@
 
   <main class="area" id="area">
     <aside class="lateral" id="lateral" aria-label="Miniaturas das páginas" hidden>
+      <div class="lateral-abas" role="tablist">
+        <button id="abaMinis" class="ativa" type="button" role="tab">Páginas</button>
+        <button id="abaMarcadores" type="button" role="tab" hidden>Marcadores</button>
+      </div>
       <div class="lateral-lista" id="miniaturas"></div>
+      <div class="lateral-marcadores" id="marcadores" hidden></div>
     </aside>
     <section class="visor" id="visor" tabindex="-1" aria-label="Documento">
       <div class="paginas" id="paginas"></div>
@@ -102,13 +129,23 @@
         <img src="/icons/icone.svg" alt="" width="88" height="88">
         <h1>EditPDFree</h1>
         <p class="sub">Editor de PDF gratuito e de código aberto, direto no navegador.</p>
-        <button class="primario grande" id="btAbrirGrande">Abrir PDF</button>
-        <p class="dica">ou arraste um PDF (ou uma imagem) para cá</p>
+        <!-- Nasce "carregando" e desabilitado: o main.ts troca para "Abrir PDF" so' quando
+             o motor esta' pronto. Com "Abrir PDF" no HTML estatico, um arquivo solto antes
+             de o JS carregar (rede lenta) era perdido sem aviso -- e o teste de fumaca
+             achava que o app estava pronto. -->
+        <button class="primario grande" id="btAbrirGrande" disabled>Carregando o motor de PDF…</button>
+        <p class="dica">ou arraste para cá um PDF, uma imagem ou um documento (Word, Excel, PowerPoint, HTML, EPUB, TXT) — ele é convertido para PDF</p>
+        <div class="atalhos-inicio">
+          <button class="bt" type="button" data-acao-inicio="camera" data-icone="camera">Digitalizar com a câmera</button>
+          <button class="bt" type="button" data-acao-inicio="comparar" data-icone="comparar">Comparar dois PDFs</button>
+          <button class="bt" type="button" data-acao-inicio="reparar" data-icone="info">Reparar PDF</button>
+        </div>
         <ul class="recursos">
           <li>Girar, excluir, reordenar, juntar, extrair e dividir páginas</li>
           <li>Caixa de texto, nota, destaque, caneta, formas e assinatura</li>
           <li>Tarja de verdade: o texto some do arquivo, não fica escondido</li>
-          <li>Preencher formulários, editar texto, marca d’água, senha</li>
+          <li>Preencher e criar formulários, editar texto, marca d’água, senha</li>
+          <li>Comprimir, recortar, OCR, converter para Word, Markdown e imagens</li>
         </ul>
         <p class="privacidade"><strong>Seus arquivos não saem do seu computador.</strong> Todo o trabalho acontece aqui, no seu navegador; nada é enviado para servidor nenhum.</p>
       </div>
@@ -120,8 +157,9 @@
     <span>Software livre sob a licença <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noopener" target="_blank">AGPL-3.0</a> · <a href="https://github.com/RicardoBiazin/editpdfree" rel="noopener" target="_blank">código-fonte</a></span>
   </footer>
 
-  <input type="file" id="arquivo" accept="application/pdf,.pdf,image/*" hidden>
-  <input type="file" id="arquivoInserir" accept="application/pdf,.pdf,image/*" multiple hidden>
+  <input type="file" id="arquivo" accept="application/pdf,.pdf,image/*,.docx,.xlsx,.pptx,.txt,.md,.html,.htm,.xhtml,.epub,.xps,.oxps,.fb2,.cbz,.svg" hidden>
+  <input type="file" id="arquivoPdf" accept="application/pdf,.pdf" hidden>
+  <input type="file" id="arquivoInserir" accept="application/pdf,.pdf,image/*,.docx,.xlsx,.pptx,.txt,.md,.html,.htm,.xhtml,.epub,.xps,.oxps,.fb2,.cbz,.svg" multiple hidden>
   <input type="file" id="arquivoImagem" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
   <div class="soltar" id="soltar" hidden><div>Solte o arquivo para abrir</div></div>
 

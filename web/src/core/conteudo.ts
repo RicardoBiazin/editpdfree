@@ -126,7 +126,8 @@ export class Acrescimo {
     return this.recurso("ExtGState", this.doc.addObject({ Type: "ExtGState", ca: v, CA: v }));
   }
 
-  gravar(conteudo: string): void {
+  /** `sob`: o trecho vai ANTES do conteudo existente (fica por baixo dele). */
+  gravar(conteudo: string, sob = false): void {
     const doc = this.doc;
     const pobj = this.pagina.getObject();
     const res = doc.newDictionary();
@@ -154,8 +155,16 @@ export class Acrescimo {
       }
       lista.push(doc.addStream("\nQ\n", {}));
     }
-    lista.push(doc.addStream("q\n" + conteudo + "\nQ\n", {}));
-    pobj.put("Contents", lista);
+    const nosso = doc.addStream("q\n" + conteudo + "\nQ\n", {});
+    if (sob) {
+      const comNosso = doc.newArray();
+      comNosso.push(nosso);
+      for (let i = 0; i < lista.length; i++) comNosso.push(lista.get(i));
+      pobj.put("Contents", comNosso);
+    } else {
+      lista.push(nosso);
+      pobj.put("Contents", lista);
+    }
   }
 }
 

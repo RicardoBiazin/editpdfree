@@ -18,6 +18,14 @@ import * as texto from "./core/texto.ts";
 import * as extras from "./core/extras.ts";
 import { renderizar } from "./core/render.ts";
 import { criarZip } from "./core/zip.ts";
+import * as otim from "./core/otimizar.ts";
+import * as recorte from "./core/recorte.ts";
+import * as conv from "./core/conversao.ts";
+import * as campos from "./core/criarcampos.ts";
+import * as ocr from "./core/ocr.ts";
+import * as mais from "./core/mais.ts";
+import { comparar, type Diferenca } from "./core/comparar.ts";
+import { nomeBase } from "./core/intervalos.ts";
 
 // Avisos do MuPDF (arquivo reparado etc.) vao para o console do worker.
 mupdf.setLog({
@@ -39,6 +47,8 @@ export interface Estado {
   modificado: boolean;
   protegido: boolean;
   assinado: boolean;
+  /** O MuPDF precisou reparar o arquivo ao abrir. */
+  reparado: boolean;
 }
 
 function sessao(): Sessao {
@@ -86,7 +96,7 @@ function assinado(doc: mupdf.PDFDocument): boolean {
 function estado(): Estado {
   if (!s) {
     return { aberto: false, nome: "", versao: 0, paginas: [], podeDesfazer: null, podeRefazer: null,
-      modificado: false, protegido: false, assinado: false };
+      modificado: false, protegido: false, assinado: false, reparado: false };
   }
   const lista: InfoPagina[] = [];
   for (let i = 0; i < s.paginas; i++) {
@@ -96,7 +106,7 @@ function estado(): Estado {
   return {
     aberto: true, nome: s.nome, versao: s.versao, paginas: lista,
     podeDesfazer: s.podeDesfazer, podeRefazer: s.podeRefazer, modificado: s.modificado,
-    protegido: s.protegidoAoSalvar, assinado: assinado(s.doc),
+    protegido: s.protegidoAoSalvar, assinado: assinado(s.doc), reparado: s.reparado,
   };
 }
 
@@ -129,6 +139,15 @@ const operacoes: Record<string, (a: Args) => unknown> = {
   numerar: (a) => extras.numerar(sessao(), a.opcoes),
   proteger: (a) => sessao().proteger(a.senhaAbrir, a.senhaDono, a.permissoes),
   removerProtecao: () => sessao().removerProtecao(),
+  comprimir: (a) => otim.comprimir(sessao(), a.opcoes),
+  recortarRetangulo: (a) => recorte.recortarRetangulo(sessao(), a.indices, a.rect),
+  recortarMargens: (a) => recorte.recortarMargens(sessao(), a.indices, a.margens),
+  criarCampos: (a) => campos.criarCampos(sessao(), a.campos),
+  marcaDaguaImagem: (a) => extras.marcaDaguaImagem(sessao(), new Uint8Array(a.bytes), a.opcoes),
+  camadaOcr: (a) => ocr.aplicarCamadaOcrVarias(sessao(), a.paginas),
+  substituirEmTudo: (a) => mais.substituirEmTudo(sessao(), a.procurado, a.novo),
+  definirMetadados: (a) => mais.definirMetadados(sessao(), a.valores),
+  carimbo: (a) => mais.carimbo(sessao(), a.pagina, a.centro, a.texto, a.cor),
   desfazer: () => sessao().desfazer(),
   refazer: () => sessao().refazer(),
 };
@@ -184,9 +203,99 @@ function executar(tipo: string, a: Args): Resposta {
     }
     case "extrairTexto":
       return [seg.extrairTexto(sessao().doc)];
+    case "reparar": {
+      const r = otim.reparar(new Uint8Array(a.bytes));
+      return [r, [r.bytes.buffer as ArrayBuffer]];
+    }
+    case "exportarImagens": {
+      const z = criarZip(conv.paginasComoImagens(sessao(), a.dpi, a.formato, a.indices));
+      return [z, [z.buffer as ArrayBuffer]];
+    }
+    case "imagensEmbutidas": {
+      const imgs = conv.imagensEmbutidas(sessao());
+      if (!imgs.length) return [null];
+      const z = criarZip(imgs);
+      return [{ zip: z, quantas: imgs.length }, [z.buffer as ArrayBuffer]];
+    }
+    case "markdown":
+      return [conv.paraMarkdown(sessao().doc)];
+    case "docx": {
+      const z = criarZip(conv.paraDocx(sessao().doc, nomeBase(sessao().nome)));
+      return [z, [z.buffer as ArrayBuffer]];
+    }
+    case "detectarCampos": {
+      const ss = sessao();
+      const lista: campos.Sugestao[] = [];
+      for (let i = 0; i < ss.paginas; i++) lista.push(...campos.detectarCampos(pagina(i), i));
+      return [lista];
+    }
+    case "paginaParaOcr": {
+      const p = pagina(a.pagina);
+      const tem = ocr.temTexto(p);
+      const pix = p.toPixmap(mupdf.Matrix.scale(a.escala, a.escala), mupdf.ColorSpace.DeviceRGB, false, false);
+      const png = pix.asPNG().slice();
+      pix.destroy();
+      return [{ png, temTexto: tem, limites: p.getBounds() }, [png.buffer as ArrayBuffer]];
+    }
+    case "metadados":
+      return [mais.metadados(sessao().doc)];
+    case "marcadores":
+      return [mais.marcadores(sessao().doc)];
+    case "links":
+      return [mais.linksDaPagina(sessao().doc, pagina(a.pagina))];
+    case "juntarImagens": {
+      const b = paginas.juntar(a.arquivos.map((x: { bytes: ArrayBuffer; nome: string }) =>
+        ({ bytes: new Uint8Array(x.bytes), nome: x.nome, tipo: "image/jpeg" })));
+      return [b, [b.buffer as ArrayBuffer]];
+    }
+    case "compararAbrir":
+      return [compararAbrir(a)];
+    case "renderComparacao": {
+      if (!comparacao) throw new Error("obsoleto");
+      const doc = a.lado === "a" ? comparacao.a : comparacao.b;
+      const img = renderizar(doc.loadPage(a.pagina), a.escala);
+      return [img, [img.rgba.buffer]];
+    }
+    case "compararFechar":
+      comparacao?.a.destroy();
+      comparacao?.b.destroy();
+      comparacao = null;
+      return [null];
     default:
       throw new Error("Pedido desconhecido: " + tipo);
   }
+}
+
+// ------------------------------------------------------------ comparacao
+
+let comparacao: { a: mupdf.PDFDocument; b: mupdf.PDFDocument } | null = null;
+
+function geometrias(doc: mupdf.PDFDocument): InfoPagina[] {
+  const lista: InfoPagina[] = [];
+  for (let i = 0; i < doc.countPages(); i++) {
+    const g = geometria(doc.loadPage(i));
+    lista.push({ ...g, largura: g.limites[2] - g.limites[0], altura: g.limites[3] - g.limites[1] });
+  }
+  return lista;
+}
+
+/** A = o documento aberto (estado atual) ou um arquivo; B = outro arquivo. */
+function compararAbrir(a: Args): { paginasA: InfoPagina[]; paginasB: InfoPagina[]; diferencas: Diferenca[]; nomeA: string } {
+  comparacao?.a.destroy();
+  comparacao?.b.destroy();
+  comparacao = null;
+  let docA: mupdf.PDFDocument, nomeA: string;
+  if (a.bytesA) {
+    docA = Sessao.abrir(new Uint8Array(a.bytesA), a.nomeA, a.senhaA ?? undefined).doc;
+    nomeA = a.nomeA;
+  } else {
+    const ss = sessao();
+    docA = mupdf.Document.openDocument(ss.instantaneo(), "application/pdf").asPDF()!;
+    nomeA = ss.nome;
+  }
+  const docB = Sessao.abrir(new Uint8Array(a.bytesB), a.nomeB, a.senhaB ?? undefined).doc;
+  comparacao = { a: docA, b: docB };
+  return { paginasA: geometrias(docA), paginasB: geometrias(docB), diferencas: comparar(docA, docB), nomeA };
 }
 
 function mensagemDeErro(e: unknown): string {

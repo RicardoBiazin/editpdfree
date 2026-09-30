@@ -3,3 +3,4 @@ dist/
 scratch/
 .netlify/
 *.log
+public/ocr/

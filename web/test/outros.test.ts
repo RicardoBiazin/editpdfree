@@ -71,7 +71,9 @@ test("marca d'água e numeração de páginas", () => {
   const b = p.getBounds();
   const r = p.search("Página 2 de 3")[0][0];
   assert.ok(r[1] > b[3] - 60, "número no rodapé visível");
-  assert.throws(() => formatarNumero("sem n", 1, 1), /\{n\}/);
+  assert.equal(formatarNumero("{arquivo} — {data} — {n}", 3, 9, { arquivo: "a.pdf", data: "30/09/2026" }),
+    "a.pdf — 30/09/2026 — 3");
+  assert.throws(() => formatarNumero("  ", 1, 1), /Informe/);
   assert.throws(() => formatarNumero("{n} {x}", 1, 1), /só aceita/);
 });
 

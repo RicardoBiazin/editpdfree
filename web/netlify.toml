@@ -21,7 +21,7 @@
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Referrer-Policy = "no-referrer"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()"
     Cross-Origin-Opener-Policy = "same-origin"
     Strict-Transport-Security = "max-age=31536000"
     X-Robots-Tag = "noindex, nofollow"
@@ -49,6 +49,19 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache"
+
+# OCR (tesseract.js): baixado so' no primeiro uso. Os idiomas ja' vem em
+# .gz e o tesseract os descompacta sozinho: sem Content-Encoding aqui.
+[[headers]]
+  for = "/ocr/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/ocr/lang/*"
+  [headers.values]
+    Content-Type = "application/octet-stream"
+    Cache-Control = "public, max-age=604800"
 
 [[headers]]
   for = "/manifest.webmanifest"

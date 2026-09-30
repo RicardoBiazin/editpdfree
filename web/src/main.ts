@@ -15,7 +15,10 @@ import { icone } from "./ui/icones.ts";
 import type { Estilo } from "./core/anotacoes.ts";
 import type { Resultado } from "./core/seguranca.ts";
 import { gruposACada, lerIntervalos, nomeBase } from "./core/intervalos.ts";
-import { POSICOES, type Posicao } from "./core/formatos.ts";
+import { CAMPOS_METADADOS, NIVEIS_COMPRESSAO, POSICOES, type Posicao } from "./core/formatos.ts";
+import type { Sugestao } from "./core/criarcampos.ts";
+import type { Diferenca } from "./core/comparar.ts";
+import type { InfoPagina } from "./rpc.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -102,6 +105,7 @@ const ferramentas = new Ferramentas({
       b.setAttribute("aria-pressed", String(ativo));
     }
   },
+  irPara: (i) => visor.irPara(i),
 });
 
 visor.aoConstruirPagina = (p) => ferramentas.instalar(p);
@@ -135,7 +139,7 @@ function aplicarEstado(novo: Estado): void {
   for (const id of ["btSalvar", "btZoomMenos", "btZoom", "btZoomMais", "btLargura", "inPagina", "btBuscar", "btLateral"]) {
     ($(id) as HTMLButtonElement).disabled = !aberto;
   }
-  for (const m of document.querySelectorAll<HTMLDetailsElement>("details.menu")) {
+  for (const m of document.querySelectorAll<HTMLDetailsElement>("details.menu:not([data-sempre])")) {
     m.classList.toggle("desativado", !aberto);
   }
   const bd = $<HTMLButtonElement>("btDesfazer"), br = $<HTMLButtonElement>("btRefazer");
@@ -150,6 +154,7 @@ function aplicarEstado(novo: Estado): void {
     ferramentas.esquecer();
     limparBusca();
   }
+  if (aberto && (!antes || antes.versao !== novo.versao || antes.nome !== novo.nome)) void atualizarMarcadores();
   if (aberto) {
     visor.aplicar(novo);
     minis.aplicar(novo);
@@ -196,6 +201,9 @@ async function abrirArquivo(f: File): Promise<void> {
         visor.definirZoom(window.innerWidth < 800 ? larg : Math.min(1.25, larg));
         visor.irPara(0, false);
         ferramentas.definir("selecionar");
+        if (novo.reparado) {
+          avisar(`O arquivo estava danificado e foi reparado ao abrir (${novo.paginas.length} página(s)). Salve para gravar a versão reparada.`, "info", 9000);
+        }
         return;
       } catch (e) {
         if (e instanceof ErroWorker && e.nomeOriginal === "SenhaNecessaria") {
@@ -393,11 +401,11 @@ const acoes: Record<string, () => unknown> = {
     for (const [k, v] of Object.entries(POSICOES)) posicao.append(el("option", { value: k, textContent: v }));
     const tamanho = el("input", { type: "number", min: "6", max: "48", value: "10" });
     const inicio = el("input", { type: "number", min: "0", value: "1" });
-    const { valor } = await dialogo("Numerar páginas", [
-      campo("Formato", formato, "{n} é o número da página e {total} o total. Ex.: Página {n} de {total}"),
+    const { valor } = await dialogo("Numerar páginas, cabeçalho e rodapé", [
+      campo("Texto", formato, "{n} = número da página, {total} = total, {arquivo} = nome do arquivo, {data} = data de hoje. Ex.: Página {n} de {total}"),
       el("div", { classe: "linha-campos" }, campo("Posição", posicao), campo("Tamanho", tamanho), campo("Começar em", inicio)),
     ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Numerar", valor: "ok", primario: true }],
-    () => formato.focus(), () => (!formato.value.includes("{n}") ? "O formato precisa conter {n}." : null));
+    () => formato.focus(), () => (!formato.value.trim() ? "Digite o texto." : /\{(?!(n|total|arquivo|data)\})/.test(formato.value) ? "Use só {n}, {total}, {arquivo} e {data}." : null));
     if (valor !== "ok") return;
     await operar("numerar", { opcoes: {
       formato: formato.value, posicao: posicao.value as Posicao, tamanho: Number(tamanho.value) || 10,
@@ -443,7 +451,304 @@ const acoes: Record<string, () => unknown> = {
     }
   },
   sobre: () => sobre(),
+  comprimir: async () => {
+    if (!exigirDocumento()) return;
+    const sel = el("select");
+    for (const [k, v] of Object.entries(NIVEIS_COMPRESSAO)) sel.append(el("option", { value: k, textContent: v.rotulo, selected: k === "media" }));
+    const { valor } = await dialogo("Comprimir", [campo("Nível", sel,
+      "Reduz a resolução das imagens maiores que o necessário, regrava como JPEG só quando fica menor, e enxuga fontes e objetos repetidos. Ctrl+Z desfaz."),
+    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Comprimir", valor: "ok", primario: true }]);
+    if (valor !== "ok") return;
+    const nivel = NIVEIS_COMPRESSAO[sel.value as keyof typeof NIVEIS_COMPRESSAO];
+    const r = await operar("comprimir", { opcoes: { dpi: nivel.dpi, qualidade: nivel.qualidade } });
+    if (r === FALHOU) return;
+    const { antes, depois, imagens } = r as { antes: number; depois: number; imagens: number };
+    const pct = antes ? Math.round((1 - depois / antes) * 100) : 0;
+    await dialogo("Comprimir", [el("p", {}, el("strong", { textContent: `${tamanho(antes)} → ${tamanho(depois)}` }),
+      pct > 0 ? ` (${pct}% menor)` : " (o arquivo já estava enxuto)"),
+    el("p", { classe: "dica", textContent: `${imagens} imagem(ns) regravada(s). O tamanho vale para o próximo “Salvar”.` })],
+    [{ rotulo: "OK", valor: "ok", primario: true }]);
+  },
+  reparar: async () => {
+    const f = await escolherArquivo($<HTMLInputElement>("arquivoPdf"));
+    if (!f) return;
+    operando++;
+    mostrarOcupado();
+    try {
+      const bytes = await f.arrayBuffer();
+      const r = await motor.pedir<{ bytes: Uint8Array; paginas: number; paginasComErro: number; estavaDanificado: boolean }>(
+        "reparar", { bytes }, [bytes]);
+      const nome = `${nomeBase(f.name)}_reparado.pdf`;
+      baixar(r.bytes, nome);
+      await dialogo("Reparar PDF", [el("p", { textContent: r.estavaDanificado
+        ? `O arquivo estava danificado. ${r.paginas - r.paginasComErro} de ${r.paginas} página(s) recuperada(s).`
+        : `O arquivo não tinha danos na estrutura (${r.paginas} página(s)); foi regravado limpo.` }),
+      el("p", { classe: "dica", textContent: `Baixado como “${nome}”.` })], [{ rotulo: "OK", valor: "ok", primario: true }]);
+    } catch (e) {
+      avisar((e as Error).message, "erro");
+    } finally {
+      operando--;
+      mostrarOcupado();
+    }
+  },
+  margens: async () => {
+    if (!exigirDocumento()) return;
+    const campos = ["cima", "direita", "baixo", "esquerda"] as const;
+    const rotulos = { cima: "Em cima", direita: "À direita", baixo: "Embaixo", esquerda: "À esquerda" };
+    const entradas = Object.fromEntries(campos.map((c) => [c, el("input", { type: "number", min: "0", step: "1", value: "10" })]));
+    const todas = el("input", { type: "checkbox", checked: true });
+    const { valor } = await dialogo("Recortar margens", [
+      el("div", { classe: "linha-campos" }, ...campos.map((c) => campo(`${rotulos[c]} (mm)`, entradas[c]))),
+      el("label", { classe: "campo-check" }, todas, " Em todas as páginas (senão, só na atual)"),
+      el("p", { classe: "dica", textContent: "As margens valem como a página aparece na tela, mesmo girada. O conteúdo fora do recorte fica escondido (CropBox), não é apagado." }),
+    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Recortar", valor: "ok", primario: true }], () => entradas.cima.focus());
+    if (valor !== "ok" || !estado) return;
+    const margens = Object.fromEntries(campos.map((c) => [c, Number(entradas[c].value) || 0]));
+    await operar("recortarMargens", { indices: todas.checked ? [...estado.paginas.keys()] : [visor.paginaAtual], margens });
+  },
+  exportarImagens: async () => {
+    if (!exigirDocumento() || !estado) return;
+    const formato = el("select");
+    formato.append(el("option", { value: "png", textContent: "PNG (sem perda)" }), el("option", { value: "jpg", textContent: "JPG (menor)" }));
+    const dpi = el("input", { type: "number", min: "24", max: "600", value: "150" });
+    const quais = el("input", { type: "text", placeholder: "todas", value: "" });
+    const total = estado.paginas.length;
+    const { valor } = await dialogo("Exportar páginas como imagem", [
+      el("div", { classe: "linha-campos" }, campo("Formato", formato), campo("Resolução (dpi)", dpi)),
+      campo("Páginas", quais, "Vazio = todas. Ex.: 1-3, 5"),
+    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Exportar", valor: "ok", primario: true }], () => dpi.focus(), () => {
+      const n = Number(dpi.value);
+      if (!(n >= 24 && n <= 600)) return "Escolha uma resolução entre 24 e 600 dpi.";
+      try { if (quais.value.trim()) lerIntervalos(quais.value, total); } catch (e) { return (e as Error).message; }
+      return null;
+    });
+    if (valor !== "ok") return;
+    const indices = quais.value.trim() ? lerIntervalos(quais.value, total).flat() : undefined;
+    await tarefa(async () => {
+      const z = await motor.pedir<Uint8Array>("exportarImagens", { dpi: Number(dpi.value), formato: formato.value, indices });
+      baixar(z, `${nomeBase(estado!.nome)}_imagens.zip`, "application/zip");
+    });
+  },
+  imagensEmbutidas: () => tarefa(async () => {
+    if (!exigirDocumento()) return;
+    const r = await motor.pedir<{ zip: Uint8Array; quantas: number } | null>("imagensEmbutidas");
+    if (!r) {
+      avisar("Este PDF não tem imagens embutidas.");
+      return;
+    }
+    baixar(r.zip, `${nomeBase(estado!.nome)}_imagens_embutidas.zip`, "application/zip");
+    avisar(`${r.quantas} imagem(ns) extraída(s).`, "ok");
+  }),
+  docx: () => tarefa(async () => {
+    if (!exigirDocumento()) return;
+    const b = await motor.pedir<Uint8Array>("docx");
+    baixar(b, `${nomeBase(estado!.nome)}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    avisar("Convertido para Word. Parágrafos, fontes e imagens vêm junto; tabelas e colunas não.", "ok", 7000);
+  }),
+  markdown: () => tarefa(async () => {
+    if (!exigirDocumento()) return;
+    const t = await motor.pedir<string>("markdown");
+    baixar(new TextEncoder().encode(t), `${nomeBase(estado!.nome)}.md`, "text/markdown;charset=utf-8");
+  }),
+  comparar: () => compararDocumentos(),
+  ocr: () => executarOcr(),
+  detectarCampos: () => tarefa(async () => {
+    if (!exigirDocumento()) return;
+    const lista = await motor.pedir<Sugestao[]>("detectarCampos");
+    if (!lista.length) {
+      avisar("Nenhum campo sugerido: não achei sublinhados, rótulos com “:” seguidos de espaço nem quadradinhos vazios.", "info", 7000);
+      return;
+    }
+    void ferramentas.definir("selecionar");
+    ferramentas.mostrarSugestoes(lista);
+  }),
+  marcaImagem: async () => {
+    if (!exigirDocumento()) return;
+    const f = await escolherArquivo($<HTMLInputElement>("arquivoImagem"));
+    if (!f) return;
+    const opac = el("input", { type: "range", min: "5", max: "100", value: "30" });
+    const escala = el("input", { type: "range", min: "5", max: "100", value: "50" });
+    const modo = el("select");
+    modo.append(el("option", { value: "centro", textContent: "Centralizada" }), el("option", { value: "mosaico", textContent: "Em mosaico (repetida)" }));
+    const camada = el("select");
+    camada.append(el("option", { value: "sobre", textContent: "Por cima do conteúdo" }), el("option", { value: "sob", textContent: "Por baixo do conteúdo" }));
+    const { valor } = await dialogo("Marca d’água de imagem", [
+      el("p", { classe: "dica", textContent: f.name }),
+      el("div", { classe: "linha-campos" }, campo("Opacidade", opac), campo("Tamanho (% da largura)", escala)),
+      el("div", { classe: "linha-campos" }, campo("Posição", modo), campo("Camada", camada)),
+      el("p", { classe: "dica", textContent: "“Por baixo” só aparece onde a página é transparente (fundo branco sem desenho)." }),
+    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Aplicar", valor: "ok", primario: true }]);
+    if (valor !== "ok") return;
+    const bytes = await f.arrayBuffer();
+    await operar("marcaDaguaImagem", { bytes, opcoes: { opacidade: Number(opac.value) / 100, escala: Number(escala.value) / 100,
+      modo: modo.value, camada: camada.value } }, [bytes]);
+  },
+  substituir: async () => {
+    if (!exigirDocumento()) return;
+    const de = el("input", { type: "text" });
+    const para = el("input", { type: "text" });
+    const { valor } = await dialogo("Substituir texto", [campo("Procurar", de), campo("Substituir por", para,
+      "Diferencia maiúsculas. Cada ocorrência é apagada de verdade e reescrita no mesmo lugar, com a fonte padrão mais parecida (Helvetica, Times ou Courier).")],
+    [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Substituir tudo", valor: "ok", primario: true }], () => de.focus(),
+    () => (!de.value ? "Digite o texto a procurar." : null));
+    if (valor !== "ok") return;
+    const n = await operar("substituirEmTudo", { procurado: de.value, novo: para.value });
+    if (n === FALHOU) return;
+    avisar(n ? `${n} ocorrência(s) substituída(s).` : "Nenhuma ocorrência encontrada.", n ? "ok" : "info");
+  },
+  propriedades: async () => {
+    if (!exigirDocumento()) return;
+    const atual = await motor.pedir<Record<string, string>>("metadados");
+    const entradas: Record<string, HTMLInputElement> = {};
+    const corpo = Object.entries(CAMPOS_METADADOS).map(([k, [, rot]]) => {
+      entradas[k] = el("input", { type: "text", value: atual[k] ?? "" });
+      return campo(rot, entradas[k]);
+    });
+    const { valor } = await dialogo("Propriedades do documento", corpo,
+      [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Gravar", valor: "ok", primario: true }], () => entradas.titulo.focus());
+    if (valor !== "ok") return;
+    const valores = Object.fromEntries(Object.keys(entradas).map((k) => [k, entradas[k].value]));
+    const r = await operar("definirMetadados", { valores });
+    if (r === true) avisar("Propriedades atualizadas.", "ok");
+  },
+  camera: () => digitalizarCamera(),
 };
+
+function exigirDocumento(): boolean {
+  if (estado?.aberto) return true;
+  avisar("Abra um PDF primeiro.");
+  return false;
+}
+
+function tamanho(b: number): string {
+  if (b < 1024) return `${b} bytes`;
+  if (b < 1048576) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1048576).toFixed(1).replace(".", ",")} MB`;
+}
+
+/** Tarefa que nao altera o documento, com indicador de ocupado e aviso de erro. */
+async function tarefa(fn: () => Promise<void>): Promise<void> {
+  operando++;
+  mostrarOcupado();
+  try {
+    await fn();
+  } catch (e) {
+    avisar((e as Error).message || "Não foi possível concluir.", "erro");
+  } finally {
+    operando--;
+    mostrarOcupado();
+  }
+}
+
+async function compararDocumentos(): Promise<void> {
+  let bytesA: ArrayBuffer | undefined, nomeA: string | undefined;
+  if (!estado?.aberto) {
+    avisar("Escolha o primeiro PDF (A, a versão antiga).");
+    const fa = await escolherArquivo($<HTMLInputElement>("arquivoPdf"));
+    if (!fa) return;
+    bytesA = await fa.arrayBuffer();
+    nomeA = fa.name;
+    avisar("Agora escolha o segundo PDF (B, a versão nova).");
+  } else {
+    avisar(`Escolha o PDF para comparar com “${estado.nome}” (que será o A, a versão antiga).`);
+  }
+  const fb = await escolherArquivo($<HTMLInputElement>("arquivoPdf"));
+  if (!fb) return;
+  const bytesB = await fb.arrayBuffer();
+  await tarefa(async () => {
+    await motor.pronto;
+    const dados = await motor.pedir<{ paginasA: InfoPagina[]; paginasB: InfoPagina[]; diferencas: Diferenca[]; nomeA: string }>(
+      "compararAbrir", { bytesA, nomeA, bytesB, nomeB: fb.name }, [bytesB, ...(bytesA ? [bytesA] : [])]);
+    const { mostrarComparacao } = await import("./ui/comparacao.ts");
+    void mostrarComparacao(motor, dados, fb.name);
+  });
+}
+
+async function executarOcr(): Promise<void> {
+  if (!exigirDocumento() || !estado) return;
+  const idioma = el("select");
+  idioma.append(el("option", { value: "por", textContent: "Português" }), el("option", { value: "por+eng", textContent: "Português + inglês" }),
+    el("option", { value: "eng", textContent: "Inglês" }));
+  const quais = el("input", { type: "text", placeholder: "todas" });
+  const total = estado.paginas.length;
+  const { valor } = await dialogo("Reconhecer texto (OCR)", [
+    el("p", { textContent: "Para PDF escaneado: o texto reconhecido entra invisível sobre a imagem, na posição de cada palavra. Assim dá para buscar, selecionar, copiar e tarjar." }),
+    el("div", { classe: "linha-campos" }, campo("Idioma", idioma), campo("Páginas", quais, "Vazio = todas")),
+    el("p", { classe: "dica", textContent: "Páginas que já têm texto são puladas. Na primeira vez o reconhecimento baixa ~6 MB do próprio site; depois funciona sem internet. Nada sai do seu computador." }),
+  ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Reconhecer", valor: "ok", primario: true }], () => idioma.focus(), () => {
+    try { if (quais.value.trim()) lerIntervalos(quais.value, total); } catch (e) { return (e as Error).message; }
+    return null;
+  });
+  if (valor !== "ok") return;
+  const paginas = quais.value.trim() ? [...new Set(lerIntervalos(quais.value, total).flat())] : [...Array(total).keys()];
+  // Progresso num dialogo nao modal com "Cancelar".
+  const barra = el("progress", { max: 1, value: 0 });
+  const texto = el("p", { textContent: "Preparando…" });
+  let cancelado = false;
+  const painel = el("div", { classe: "progresso-ocr", role: "status" } as Partial<HTMLDivElement>, el("strong", { textContent: "Reconhecendo texto" }), texto, barra);
+  const btCancelar = el("button", { type: "button", textContent: "Cancelar" });
+  btCancelar.addEventListener("click", () => { cancelado = true; texto.textContent = "Cancelando…"; });
+  painel.append(btCancelar);
+  document.body.append(painel);
+  try {
+    const { reconhecer } = await import("./ui/ocr.ts");
+    const r = await reconhecer(motor, paginas, idioma.value, (t, f) => { texto.textContent = t; barra.value = f; }, () => cancelado);
+    const palavras = r.paginas.reduce((n, p) => n + p.palavras.length, 0);
+    if (palavras) {
+      const res = await operar("camadaOcr", { paginas: r.paginas });
+      if (res === FALHOU) return;
+    }
+    const pul = r.puladas.length ? ` ${r.puladas.length} página(s) já tinham texto e foram puladas.` : "";
+    avisar(palavras ? `Texto reconhecido: ${palavras} palavra(s) em ${r.paginas.length} página(s).${pul}`
+      : `Nenhum texto reconhecido.${pul}`, palavras ? "ok" : "info", 8000);
+  } catch (e) {
+    avisar("Falha no reconhecimento de texto: " + ((e as Error).message || String(e)), "erro");
+  } finally {
+    painel.remove();
+  }
+}
+
+async function digitalizarCamera(): Promise<void> {
+  const { digitalizar } = await import("./ui/camera.ts");
+  const paginas = await digitalizar();
+  if (!paginas?.length) return;
+  await tarefa(async () => {
+    await motor.pronto;
+    const arquivos = await Promise.all(paginas.map(async (b, i) => ({ bytes: await b.arrayBuffer(), nome: `pagina${i + 1}.jpg` })));
+    const pdf = await motor.pedir<Uint8Array>("juntarImagens", { arquivos }, arquivos.map((a) => a.bytes));
+    const hoje = new Date().toISOString().slice(0, 10);
+    await abrirArquivo(new File([pdf as Uint8Array<ArrayBuffer>], `digitalizacao-${hoje}.pdf`, { type: "application/pdf" }));
+  });
+}
+
+// ---------------------------------------------------------------- marcadores
+
+async function atualizarMarcadores(): Promise<void> {
+  const lista = $("marcadores");
+  const aba = $("abaMarcadores");
+  const itens = await motor.pedir<{ titulo: string; nivel: number; pagina: number | null }[]>("marcadores").catch(() => []);
+  aba.hidden = itens.length === 0;
+  // So' a aba "Paginas": nem mostra a barra de abas.
+  (aba.parentElement as HTMLElement).hidden = itens.length === 0;
+  if (!itens.length && !lista.hidden) mostrarAba("miniaturas");
+  lista.textContent = "";
+  for (const m of itens) {
+    const b = el("button", { type: "button", classe: "marcador", textContent: m.titulo, disabled: m.pagina === null });
+    b.style.paddingLeft = `${8 + m.nivel * 14}px`;
+    b.title = m.pagina === null ? m.titulo : `${m.titulo} (página ${m.pagina + 1})`;
+    b.addEventListener("click", () => { if (m.pagina !== null) visor.irPara(m.pagina); });
+    lista.append(b);
+  }
+}
+
+function mostrarAba(qual: "miniaturas" | "marcadores"): void {
+  $("miniaturas").hidden = qual !== "miniaturas";
+  $("marcadores").hidden = qual !== "marcadores";
+  $("abaMinis").classList.toggle("ativa", qual === "miniaturas");
+  $("abaMarcadores").classList.toggle("ativa", qual === "marcadores");
+}
+$("abaMinis").addEventListener("click", () => mostrarAba("miniaturas"));
+$("abaMarcadores").addEventListener("click", () => mostrarAba("marcadores"));
 
 async function sobre(): Promise<void> {
   const link = (href: string, t: string) => el("a", { href, textContent: t, target: "_blank", rel: "noopener" });
@@ -454,7 +759,8 @@ async function sobre(): Promise<void> {
       " O PDF é aberto, editado e salvo aqui mesmo, no seu navegador, pelo MuPDF compilado para WebAssembly. Não há servidor recebendo arquivos, nem contagem de acesso, nem anúncios."),
     el("p", {}, "Software livre sob a licença ", link("https://www.gnu.org/licenses/agpl-3.0.html", "AGPL-3.0"),
       ". Código-fonte: ", link("https://github.com/RicardoBiazin/editpdfree", "github.com/RicardoBiazin/editpdfree"), "."),
-    el("p", { classe: "dica" }, "Motor de PDF: ", link("https://mupdf.com", "MuPDF"), " (MuPDF.js, AGPL-3.0), da Artifex Software."),
+    el("p", { classe: "dica" }, "Motor de PDF: ", link("https://mupdf.com", "MuPDF"), " (MuPDF.js, AGPL-3.0), da Artifex Software. Reconhecimento de texto: ",
+      link("https://github.com/naptha/tesseract.js", "tesseract.js"), " (Apache-2.0), servido por este site e carregado só quando usado."),
     el("p", { classe: "dica", textContent: "Atalhos: Ctrl+O abrir · Ctrl+S salvar · Ctrl+Z/Ctrl+Y desfazer/refazer · Ctrl+F localizar · Delete exclui a anotação selecionada · Ctrl+roda do mouse: zoom · Esc volta para Selecionar." }),
   ], [{ rotulo: "Fechar", valor: "ok", primario: true }]);
 }
@@ -562,6 +868,9 @@ $("btAbrir").addEventListener("click", async () => {
   if (f) await abrirArquivo(f);
 });
 $("btAbrirGrande").addEventListener("click", () => $("btAbrir").click());
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-acao-inicio]")) {
+  b.addEventListener("click", () => void acoes[b.dataset.acaoInicio!]?.());
+}
 $("btSalvar").addEventListener("click", () => void salvar());
 $("btDesfazer").addEventListener("click", () => void desfazer());
 $("btRefazer").addEventListener("click", () => void refazer());
