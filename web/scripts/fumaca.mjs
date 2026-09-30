@@ -115,11 +115,14 @@ ws.addEventListener("message", (ev) => {
   } else if (m.method === "Network.requestWillBeSent") {
     const u = m.params.request.url;
     if (!/^(data:|blob:|about:|chrome|devtools)/.test(u) && !u.startsWith(new URL(URL_APP).origin)) externas.push(u);
+  } else if (m.method === "Page.javascriptDialogOpening") {
+    // "Sair sem salvar?" (beforeunload) ao recarregar: confirma.
+    void cdp("Page.handleJavaScriptDialog", { accept: true }).catch(() => undefined);
   } else if (m.method === "Page.fileChooserOpened") {
     // Seletor de arquivo do app: responde com o arquivo preparado pelo roteiro.
     const alvo = arquivoParaEscolher;
     arquivoParaEscolher = null;
-    if (alvo) void cdp("DOM.setFileInputFiles", { files: [alvo], backendNodeId: m.params.backendNodeId }).catch(() => undefined);
+    if (alvo) void cdp("DOM.setFileInputFiles", { files: Array.isArray(alvo) ? alvo : [alvo], backendNodeId: m.params.backendNodeId }).catch(() => undefined);
   } else if (m.method === "Runtime.exceptionThrown") {
     erros.push("exceção: " + (m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text));
   } else if (m.method === "Log.entryAdded" && m.params.entry.level === "error") {
@@ -604,6 +607,53 @@ try {
   }
   ok(await aguardar(`document.title.includes("digitalizacao-") && document.querySelectorAll(".pagina").length === 2`, 20000),
     "câmera: PDF de 2 páginas criado e aberto");
+
+  // ---- juntar PDFs (com o documento aberto como primeiro item)
+  const juntarA = salvarFixture("doc10.pdf", criarPdf([{ linhas: ["D10-1"] }, { linhas: ["D10-2"] }]));
+  const juntarB = salvarFixture("doc2.pdf", criarPdf([{ linhas: ["D2-1"] }]));
+  const juntarC = salvarFixture("abc.pdf", criarPdf([{ linhas: ["ABC-1"] }, { linhas: ["ABC-2"] }, { linhas: ["ABC-3"] }]));
+  const nomesJuntar = () => avaliar(`[...document.querySelectorAll(".juntar-item .juntar-info strong")].map(s => s.textContent.replace(/^\\d+\\. /, ""))`);
+  await menu("juntar");
+  ok(await aguardar(`!!document.querySelector("dialog.juntar[open]") && document.querySelectorAll(".juntar-item.ok").length === 1`),
+    "juntar: diálogo abre com o documento aberto como primeiro item");
+  arquivoParaEscolher = [juntarA, juntarB, juntarC];
+  await avaliar(`document.querySelector("dialog.juntar .juntar-ferramentas button.primario").click(), true`);
+  ok(await aguardar(`document.querySelectorAll(".juntar-item.ok").length === 4 && document.querySelectorAll(".juntar-item img").length === 4`),
+    "juntar: 3 arquivos adicionados, com miniatura e número de páginas");
+  ok(await avaliar(`/3 página\\(s\\)/.test(document.querySelectorAll(".juntar-item")[3].textContent)`), "juntar: contagem de páginas por item");
+  // Arrastar o ultimo (abc) para o topo.
+  const lis = await avaliar(`[...document.querySelectorAll(".juntar-item")].map(l => { const r = l.getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2, r.top]; })`);
+  await arrastar(lis[3][0], lis[3][1], lis[0][0], lis[0][2] + 4);
+  ok((await nomesJuntar())[0] === "abc.pdf", "juntar: arrastar muda a ordem");
+  // Alt+seta para baixo no primeiro.
+  await avaliar(`document.querySelector(".juntar-item").focus(), true`);
+  await tecla("ArrowDown", "ArrowDown", 1, 40);
+  ok((await nomesJuntar())[1] === "abc.pdf", "juntar: Alt+↓ desce o item");
+  await avaliar(`[...document.querySelectorAll("dialog.juntar button")].find(b => b.textContent === "Ordenar por nome").click(), true`);
+  const ordenado = await nomesJuntar();
+  ok(ordenado[0] === "abc.pdf" && ordenado[2] === "doc2.pdf" && ordenado[3] === "doc10.pdf", `juntar: ordenar por nome (natural): ${ordenado.join(", ")}`);
+  // Intervalo invalido bloqueia; valido libera.
+  const campoIntervalo = (v) => avaliar(`(() => { const i = document.querySelectorAll(".juntar-intervalo")[3]; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event("input")); return true; })()`);
+  await campoIntervalo("9");
+  ok(await aguardar(`document.querySelector("dialog.juntar .dialogo-botoes button.primario").disabled && /fora do documento/.test(document.querySelectorAll(".juntar-item")[3].textContent)`),
+    "juntar: intervalo inválido avisa no item e bloqueia");
+  await campoIntervalo("2");
+  ok(await aguardar(`!document.querySelector("dialog.juntar .dialogo-botoes button.primario").disabled`), "juntar: intervalo válido libera");
+  await captura("fumaca-10-juntar.png");
+  await avaliar(`document.querySelector("dialog.juntar .dialogo-botoes button.primario").click(), true`);
+  if (await aguardar(`!!document.querySelector("dialog[open] button.primario")?.textContent.includes("Abrir mesmo assim")`, 5000)) {
+    await confirmarDialogo();
+  }
+  ok(await aguardar(`document.title.includes("juntado.pdf") && document.querySelectorAll(".pagina").length === 7`, 20000),
+    "juntar: resultado aberto como juntado.pdf com 7 páginas (3 + 2 + 1 + 1)");
+  ok(await avaliar(`document.title.startsWith("•")`), "juntar: resultado ainda não salvo");
+  await tecla("f", "KeyF", 2, 70);
+  await avaliar(`(() => { const i = document.getElementById("inBusca"); i.value = "D10-"; i.dispatchEvent(new Event("input")); return true; })()`);
+  ok(await aguardar(`document.getElementById("contagemBusca").textContent === "1 de 1"`), "juntar: só a página 2 do doc10 entrou");
+  await avaliar(`(() => { const i = document.getElementById("inBusca"); i.value = "ABC-1"; i.dispatchEvent(new Event("input")); return true; })()`);
+  ok(await aguardar(`document.getElementById("contagemBusca").textContent === "1 de 1" && document.getElementById("inPagina").value === "1"`),
+    "juntar: abc.pdf ficou no começo");
+  await avaliar(`document.getElementById("btBuscaFechar").click(), true`);
 
   // Service worker e modo offline.
   if (!DEV) {

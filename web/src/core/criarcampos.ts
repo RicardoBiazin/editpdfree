@@ -26,7 +26,7 @@ export type TipoNovoCampo = "texto" | "caixa";
 export interface NovoCampo { pagina: number; tipo: TipoNovoCampo; rect: Retangulo; nome?: string }
 export interface Sugestao extends NovoCampo { motivo: string }
 
-function acroForm(doc: mupdf.PDFDocument): mupdf.PDFObject {
+export function acroForm(doc: mupdf.PDFDocument): mupdf.PDFObject {
   const raiz = doc.getTrailer().get("Root");
   let af = raiz.get("AcroForm");
   if (!af.isDictionary()) {

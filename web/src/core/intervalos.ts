@@ -54,3 +54,11 @@ export function nomeBase(nome: string): string {
   return nome.replace(/\.pdf$/i, "") || "documento";
 }
 
+
+const colacao = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
+
+/** Ordem "natural" de nomes de arquivo: "doc2" antes de "doc10", sem
+ *  diferenciar maiusculas nem acentos. */
+export function compararNomes(a: string, b: string): number {
+  return colacao.compare(a, b);
+}

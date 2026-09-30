@@ -4,7 +4,7 @@ A versão web do [EditPDFree](https://github.com/RicardoBiazin/editpdfree): um e
 
 **Seus arquivos não saem do seu computador.** O PDF é aberto, editado e salvo aqui mesmo, pelo [MuPDF](https://mupdf.com) compilado para WebAssembly ([MuPDF.js](https://www.npmjs.com/package/mupdf)). Não há servidor recebendo arquivos, nem analytics, nem requisição externa: fontes, ícones, o motor `.wasm` e o OCR são servidos pelo próprio site. Depois da primeira visita o app funciona sem internet (PWA instalável).
 
-Versão **0.2.0**.
+Versão **0.3.0**.
 
 ## O que faz
 
@@ -47,6 +47,7 @@ Versão **0.2.0**.
 - **Propriedades** (título, autor, assunto, palavras-chave)
 
 **Ferramentas**
+- **Juntar PDFs** (tela de início, menu Páginas ou Ferramentas; funciona sem documento aberto): adicione vários arquivos (botão ou arrastando para a janela do Juntar) — PDF, imagens e documentos (Word, Excel, PowerPoint, HTML, EPUB, TXT). Cada item mostra a miniatura da primeira página, o nome, o número de páginas e o tamanho, e aceita um intervalo próprio (`1-3, 5, 8-`; vazio = todas), validado na hora. A ordem se muda arrastando (no toque: segure e arraste), pelos botões ↑/↓, por Alt+↑/↓, “Ordenar por nome” (ordem natural: `doc2` antes de `doc10`, sem diferenciar acentos), “Ordenar por data” ou “Inverter ordem”. PDF com senha pede a senha no próprio item. Se houver um documento aberto, ele entra como primeiro item (com as alterações ainda não salvas). Opção de criar um marcador para cada arquivo. O resultado abre no editor como `juntado.pdf`, ainda não salvo — ou “Baixar direto”
 - **Comprimir** (leve, média ou forte): reamostra as imagens maiores que o necessário, regrava como JPEG só quando fica menor, enxuga fontes e objetos repetidos; mostra o tamanho antes → depois
 - **Reconhecer texto (OCR)** em PDF escaneado, com o [tesseract.js](https://github.com/naptha/tesseract.js) (português e/ou inglês): o texto entra **invisível** na posição de cada palavra, então buscar, selecionar, copiar e tarjar passam a funcionar. Carregado só quando usado
 - **Comparar dois PDFs** palavra a palavra, no documento inteiro (não página contra página): os dois lado a lado, removido em vermelho, inserido em verde, e a lista clicável das diferenças
@@ -74,7 +75,9 @@ npm run fumaca          # abre o app de verdade e exercita abrir, anotar, mover,
                         # PDF com senha, salvar (e confere o arquivo baixado), TXT->PDF, comprimir,
                         # exportar imagens, Word, Markdown, recortar, carimbo, propriedades,
                         # substituir, comparar, reparar, detectar/criar campos, marca d'água de
-                        # imagem, OCR, câmera (câmera falsa do Chrome), modo offline e 390 px;
+                        # imagem, OCR, câmera (câmera falsa do Chrome), juntar PDFs (3 arquivos +
+                        # o aberto, arrastar, Alt+seta, ordenar por nome, intervalo), modo
+                        # offline e 390 px;
                         # e confere que nenhuma requisição saiu para outro site
 npm run fumaca:portao   # o mesmo, passando antes pelo portão anti-robô
 npm run fumaca -- --dev # contra o `vite dev`
@@ -148,6 +151,7 @@ Para testar o portão localmente sem publicar: `npm run build && npm run portao:
 - **Detectar campos** é heurística: confira as sugestões antes de criar.
 - **Câmera**: recorte simples pelas bordas claras da folha sobre fundo mais escuro; não corrige perspectiva (fotografe de cima). Só em HTTPS/localhost.
 - **Comparar** compara o texto (palavras), não o desenho: imagens e formatação não entram na comparação.
+- **Juntar PDFs**: anotações, campos de formulário e marcadores de cada arquivo vêm junto. Campo em hierarquia (`pai.filho`) vira um campo de primeiro nível com o nome completo (`pai_filho`); nome que já existe no resultado ganha sufixo (`nome_2`), para que dois arquivos com o mesmo campo não passem a ser preenchidos juntos (grupos de botões de opção continuam agrupados). Links internos (de uma página para outra) não vêm junto, e o resultado sai sem senha e sem assinatura digital.
 - **Carimbo**: a aparência é desenhada pelo app; outros leitores a mostram igual, mas se alguém “regenerar” a anotação noutro programa ela pode virar o carimbo padrão dele.
 - Salvar é **baixar**: o navegador não sobrescreve o arquivo original.
 - Texto novo e texto editado usam as fontes padrão do PDF (Helvetica, Times, Courier), com os caracteres do Latin-1 (acentos do português, aspas, travessão e euro funcionam; letras de outros alfabetos viram “?”). Só dá para editar texto horizontal. A fonte original quase sempre vem embutida só com as letras usadas e não serve para letras novas — a mesma limitação do desktop.

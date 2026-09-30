@@ -26,6 +26,7 @@ import * as ocr from "./core/ocr.ts";
 import * as mais from "./core/mais.ts";
 import { comparar, type Diferenca } from "./core/comparar.ts";
 import { nomeBase } from "./core/intervalos.ts";
+import { infoArquivo, juntarArquivos } from "./core/juntar.ts";
 
 // Avisos do MuPDF (arquivo reparado etc.) vao para o console do worker.
 mupdf.setLog({
@@ -160,6 +161,8 @@ function executar(tipo: string, a: Args): Resposta {
   switch (tipo) {
     case "abrir": {
       const nova = Sessao.abrir(new Uint8Array(a.bytes), a.nome, a.senha ?? undefined, a.tipo ?? "");
+      // Documento criado pelo app (ex.: "Juntar PDFs"): ainda nao foi salvo.
+      if (a.novo) nova.modificado = true;
       s?.fechar();
       s = nova;
       cacheVersao = -1;
@@ -247,6 +250,19 @@ function executar(tipo: string, a: Args): Resposta {
       const b = paginas.juntar(a.arquivos.map((x: { bytes: ArrayBuffer; nome: string }) =>
         ({ bytes: new Uint8Array(x.bytes), nome: x.nome, tipo: "image/jpeg" })));
       return [b, [b.buffer as ArrayBuffer]];
+    }
+    case "juntarInfo": {
+      const info = infoArquivo(new Uint8Array(a.bytes), a.nome, a.tipo ?? "", a.senha ?? undefined);
+      return [info, info.miniatura ? [info.miniatura.buffer as ArrayBuffer] : []];
+    }
+    case "juntarArquivos": {
+      const b = juntarArquivos(a.itens.map((x: { bytes: ArrayBuffer; nome: string; tipo?: string; senha?: string; intervalo?: string }) =>
+        ({ ...x, bytes: new Uint8Array(x.bytes) })), a.opcoes);
+      return [b, [b.buffer as ArrayBuffer]];
+    }
+    case "bytesAberto": {
+      const b = sessao().instantaneo();
+      return [{ bytes: b, nome: sessao().nome }, [b.buffer as ArrayBuffer]];
     }
     case "compararAbrir":
       return [compararAbrir(a)];

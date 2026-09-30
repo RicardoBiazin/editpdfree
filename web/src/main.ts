@@ -180,7 +180,7 @@ function escolherArquivo(input: HTMLInputElement): Promise<File | null> {
   });
 }
 
-async function abrirArquivo(f: File): Promise<void> {
+async function abrirArquivo(f: File, criadoPeloApp = false): Promise<void> {
   if (estado?.modificado && !(await confirmar("Abrir outro arquivo",
     `As alterações em “${estado.nome}” ainda não foram salvas e serão perdidas.`, "Abrir mesmo assim", true))) return;
   let senha: string | undefined;
@@ -192,7 +192,7 @@ async function abrirArquivo(f: File): Promise<void> {
     for (;;) {
       const bytes = await f.arrayBuffer();
       try {
-        const novo = await motor.pedir<Estado>("abrir", { bytes, nome: f.name, tipo: f.type, senha }, [bytes]);
+        const novo = await motor.pedir<Estado>("abrir", { bytes, nome: f.name, tipo: f.type, senha, novo: criadoPeloApp }, [bytes]);
         visor.zoom = 1;
         visor.paginaAtual = 0;
         minis.limparSelecao();
@@ -612,6 +612,7 @@ const acoes: Record<string, () => unknown> = {
     if (r === true) avisar("Propriedades atualizadas.", "ok");
   },
   camera: () => digitalizarCamera(),
+  juntar: () => juntarPdfsAcao(),
 };
 
 function exigirDocumento(): boolean {
@@ -706,6 +707,23 @@ async function executarOcr(): Promise<void> {
   } finally {
     painel.remove();
   }
+}
+
+async function juntarPdfsAcao(): Promise<void> {
+  await motor.pronto;
+  let aberto: { nome: string; bytes: Uint8Array } | undefined;
+  if (estado?.aberto) {
+    aberto = await motor.pedir<{ nome: string; bytes: Uint8Array }>("bytesAberto").catch(() => undefined);
+  }
+  const { juntarPdfs } = await import("./ui/juntar.ts");
+  const r = await juntarPdfs(motor, aberto);
+  if (!r) return;
+  if (!r.abrir) {
+    baixar(r.bytes, "juntado.pdf");
+    avisar("“juntado.pdf” baixado.", "ok");
+    return;
+  }
+  await abrirArquivo(new File([r.bytes as Uint8Array<ArrayBuffer>], "juntado.pdf", { type: "application/pdf" }), true);
 }
 
 async function digitalizarCamera(): Promise<void> {
@@ -996,6 +1014,8 @@ $("visor").addEventListener("wheel", (ev) => {
 let profundidade = 0;
 window.addEventListener("dragenter", (ev) => {
   if (!ev.dataTransfer?.types.includes("Files")) return;
+  // Com "Juntar PDFs" aberto, o proprio dialogo recebe os arquivos.
+  if (document.querySelector("dialog.juntar[open]")) return;
   profundidade++;
   $("soltar").hidden = false;
 });

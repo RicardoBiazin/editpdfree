@@ -456,6 +456,48 @@ body.com-comparacao { overflow: hidden; }
 .camera-botoes { display: flex; gap: 10px; justify-content: flex-end; padding: 10px 16px 16px; }
 .camera-botoes button:not(.primario) { background: #333; color: #eee; border: 1px solid #555; border-radius: 8px; padding: 9px 16px; cursor: pointer; }
 
+/* ------------------------------------------------------------ juntar PDFs */
+
+.dialogo.juntar { max-width: min(760px, calc(100vw - 32px)); }
+.dialogo.juntar.soltando { outline: 3px dashed var(--realce); outline-offset: -6px; }
+.juntar-caixa { padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 48px); }
+.juntar-caixa h2 { margin: 0; font-size: 1.2rem; }
+.juntar-caixa .dica { color: var(--texto-2); font-size: 0.88rem; margin: 0; }
+.juntar-ferramentas button:not(.primario) { border: 1px solid var(--borda); background: var(--painel-2); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.juntar-vazio { border: 2px dashed var(--borda); border-radius: 10px; padding: 28px 16px; text-align: center; color: var(--texto-2); margin: 0; }
+.juntar-lista { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+.juntar-item {
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--borda);
+  border-radius: 10px; background: var(--painel-2); touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
+.juntar-item:focus-visible { outline: 2px solid var(--foco); }
+.juntar-item.erro, .juntar-item.senha { border-color: var(--erro); }
+.juntar-pega { color: var(--texto-2); cursor: grab; flex: none; }
+.juntar-item img, .juntar-sem-mini { width: 56px; height: 72px; object-fit: contain; background: #fff; border-radius: 3px; flex: none; box-shadow: var(--pagina-sombra); }
+.juntar-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.juntar-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.juntar-info small { color: var(--texto-2); }
+.juntar-info small.juntar-erro { color: var(--erro); font-weight: 600; }
+.juntar-rotulo-intervalo { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--texto-2); }
+.dialogo input.juntar-intervalo { width: 10em; max-width: 100%; padding: 4px 8px; border: 1px solid var(--borda); border-radius: 6px; background: var(--painel); user-select: text; }
+.dialogo input.juntar-intervalo.invalido { border-color: var(--erro); }
+.juntar-senha { display: flex; gap: 6px; flex-wrap: wrap; }
+.dialogo .juntar-senha input { padding: 4px 8px; border: 1px solid var(--borda); border-radius: 6px; background: var(--painel); width: 12em; user-select: text; }
+.juntar-senha button { border: 1px solid var(--borda); background: var(--painel); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.juntar-acoes { display: flex; gap: 2px; flex: none; }
+.juntar-acoes .bt { min-width: 32px; min-height: 32px; padding: 0 4px; }
+.juntar-lista.arrastando .juntar-item { cursor: grabbing; }
+.juntar-item.inserir-antes::before, .juntar-item.inserir-depois::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 3px; background: var(--realce); border-radius: 2px;
+}
+.juntar-item.inserir-antes::before { top: -6px; }
+.juntar-item.inserir-depois::after { bottom: -6px; }
+.juntar-resumo { margin-right: auto; align-self: center; color: var(--texto-2); font-size: 0.9rem; }
+@media (max-width: 560px) {
+  .juntar-item { flex-wrap: wrap; }
+  .juntar-info { flex-basis: calc(100% - 120px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
