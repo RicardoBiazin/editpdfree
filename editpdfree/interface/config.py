@@ -35,6 +35,10 @@ class Config(dict):
         "ultima_pasta": "",
         # So' o CAMINHO do .pfx; a senha nunca e' guardada.
         "ultimo_certificado": "",
+        # Barra de atalhos: ids das acoes (ver interface/atalhos.py). None =
+        # usar o padrao de fabrica; lista vazia = o usuario esvaziou a barra.
+        "atalhos": None,
+        "atalhos_texto": False,
     }
 
     @classmethod

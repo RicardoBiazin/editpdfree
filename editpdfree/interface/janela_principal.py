@@ -18,7 +18,7 @@ from .. import (NOME, VERSAO, anotacoes, assinatura_digital, conversao,
                 paginas, pdfa, reparar, seguranca, texto)
 from ..documento import Documento, SenhaNecessaria
 from . import aba as modulo_aba
-from . import config, dialogos, dialogos_extras, icones
+from . import atalhos, config, dialogos, dialogos_extras, icones
 from .aba import AbaDocumento
 from .ferramentas import INFO, Ferramenta
 
@@ -109,6 +109,10 @@ class JanelaPrincipal(QMainWindow):
         self.a_detectar = a("Detectar campos de formulário…",
                             self.detectar_campos)
         self.a_digitalizar = a("&Digitalizar do scanner…", self.digitalizar)
+        # Fica fora do catalogo de atalhos (prefixo "_"): nao faz sentido um
+        # botao para personalizar os botoes.
+        self._a_personalizar = a("Personalizar barra de atalhos…",
+                                 self.personalizar_atalhos)
 
         self.a_desfazer = a("&Desfazer", self.desfazer, S.Undo)
         self.a_refazer = a("&Refazer", self.refazer, S.Redo)
@@ -189,7 +193,9 @@ class JanelaPrincipal(QMainWindow):
                            (self.a_reduzir, "reduzir"),
                            (self.a_largura, "largura"),
                            (self.a_imprimir, "imprimir"),
-                           (self.a_assinar_cert, "assinar_certificado")):
+                           (self.a_assinar_cert, "assinar_certificado"),
+                           (self.a_juntar, "juntar"), (self.a_lote, "lote"),
+                           (self.a_comparar, "comparar"), (self.a_ocr, "ocr")):
             acao.setIcon(icones.icone(nome))
 
         # Acoes que dependem de haver documento aberto.
@@ -251,6 +257,7 @@ class JanelaPrincipal(QMainWindow):
         m.addActions([self.a_anterior, self.a_seguinte])
         m.addSeparator()
         m.addAction(self.a_miniaturas)
+        m.addAction(self._a_personalizar)
 
         m = barra.addMenu("&Páginas")
         m.addActions([self.a_girar_esq, self.a_girar_dir])
@@ -387,6 +394,49 @@ class JanelaPrincipal(QMainWindow):
         f.addWidget(self.opacidade)
         self.addToolBar(f)
         self.barra_ferramentas = f
+
+        self.barra_atalhos = QToolBar("Atalhos")
+        self.barra_atalhos.setObjectName("barra_atalhos")
+        self.barra_atalhos.setIconSize(QSize(22, 22))
+        self.addToolBar(self.barra_atalhos)
+        escolhidos = self.cfg.get("atalhos")
+        self.definir_atalhos(atalhos.PADRAO if escolhidos is None
+                             else escolhidos,
+                             bool(self.cfg.get("atalhos_texto")))
+
+    # -- barra de atalhos -------------------------------------------------------
+    def definir_atalhos(self, ids: list[str], com_texto: bool = False) -> list[str]:
+        """Monta a barra de atalhos. Ids desconhecidos (de uma versao que
+        tinha outra acao) sao ignorados sem erro. Devolve os ids aplicados."""
+        por_id = {ident: acao for ident, _c, acao in atalhos.catalogo(self)}
+        validos = [i for i in ids if i in por_id]
+        barra = self.barra_atalhos
+        barra.clear()
+        for ident in validos:
+            barra.addAction(por_id[ident])
+        barra.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon if com_texto
+            else Qt.ToolButtonStyle.ToolButtonIconOnly)
+        # Sem icone, o botao mostra o texto de qualquer jeito (IconOnly cai
+        # para texto quando a acao nao tem icone).
+        barra.setVisible(bool(validos))
+        self.cfg["atalhos"] = validos
+        self.cfg["atalhos_texto"] = com_texto
+        return validos
+
+    def personalizar_atalhos(self) -> None:
+        d = atalhos.DialogoAtalhos(atalhos.catalogo(self),
+                                   self.cfg.get("atalhos") or [],
+                                   bool(self.cfg.get("atalhos_texto")), self)
+        if d.exec() == d.DialogCode.Accepted:
+            self.definir_atalhos(d.escolhidos(), d.com_texto.isChecked())
+            self.cfg.gravar()
+
+    def createPopupMenu(self):                            # noqa: N802
+        menu = super().createPopupMenu()
+        menu.addSeparator()
+        menu.addAction(self._a_personalizar)
+        return menu
 
     # -- estilo ---------------------------------------------------------------
     def estilo(self) -> anotacoes.Estilo:

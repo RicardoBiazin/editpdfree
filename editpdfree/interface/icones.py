@@ -295,6 +295,30 @@ def _desenhar(nome: str, p: QPainter) -> None:
         p.drawRoundedRect(QRectF(5, 17, 38, 18), 3, 3)
         p.setBrush(_cor_fundo())
         p.drawRect(QRectF(14, 28, 20, 14))
+    elif nome in ("juntar", "lote", "comparar"):
+        p.setPen(_caneta(largura=2.4))
+        p.setBrush(_cor_fundo())
+        if nome == "lote":
+            for k in (0, 5, 10):
+                p.drawRect(QRectF(6 + k, 16 - k, 22, 28))
+        elif nome == "comparar":
+            p.drawRect(QRectF(4, 8, 18, 32))
+            p.drawRect(QRectF(26, 8, 18, 32))
+            p.setPen(_caneta(vermelho, 3))
+            p.drawLine(QPointF(8, 20), QPointF(18, 20))
+            p.setPen(_caneta(QColor(30, 150, 60), 3))
+            p.drawLine(QPointF(30, 26), QPointF(40, 26))
+        else:
+            p.drawRect(QRectF(4, 6, 16, 22))
+            p.drawRect(QRectF(28, 6, 16, 22))
+            p.setPen(_caneta(azul, 3))
+            p.drawLine(QPointF(12, 30), QPointF(22, 40))
+            p.drawLine(QPointF(36, 30), QPointF(26, 40))
+            p.setBrush(azul)
+            p.drawRect(QRectF(20, 38, 8, 6))
+    elif nome == "ocr":
+        _pagina(p, dobra=True)
+        _letra(p, "Aa", QRectF(12, 14, 26, 24), tamanho=15, cor=azul)
     elif nome == "app":
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(200, 30, 45))
