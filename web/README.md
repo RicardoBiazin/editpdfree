@@ -1,5 +1,7 @@
 # EditPDFree para navegador
 
+**Endereço:** https://editpdfree.biazin.com.br (o antigo editpdfree.netlify.app redireciona para cá).
+
 A versão web do [EditPDFree](https://github.com/RicardoBiazin/editpdfree): um editor de PDF gratuito e de código aberto, em português, que roda **inteiro no navegador**.
 
 **Seus arquivos não saem do seu computador.** O PDF é aberto, editado e salvo aqui mesmo, pelo [MuPDF](https://mupdf.com) compilado para WebAssembly ([MuPDF.js](https://www.npmjs.com/package/mupdf)). Não há servidor recebendo arquivos, nem analytics, nem requisição externa: fontes, ícones, o motor `.wasm` e o OCR são servidos pelo próprio site. Depois da primeira visita o app funciona sem internet (PWA instalável).

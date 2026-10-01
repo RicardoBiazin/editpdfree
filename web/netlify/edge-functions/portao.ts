@@ -27,6 +27,9 @@ interface Contexto {
 }
 declare const Netlify: { env: { get(nome: string): string | undefined } };
 
+const DOMINIO_OFICIAL = "editpdfree.biazin.com.br";
+const DOMINIO_ANTIGO = "editpdfree.netlify.app";
+
 const LIVRES = /^\/(robots\.txt|favicon\.ico|manifest\.webmanifest|icons\/[\w.-]+)$/;
 
 const CSP_PORTAO = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; "
@@ -57,6 +60,13 @@ function querHtml(req: Request): boolean {
 export default async function portao(req: Request, context: Contexto): Promise<Response> {
   const url = new URL(req.url);
   const caminho = url.pathname;
+
+  // Endereco antigo -> oficial, ANTES do portao: senao quem chega pelo antigo
+  // resolveria o desafio duas vezes (o cookie e' por dominio). So' o nome
+  // exato: previas de deploy ("<id>--editpdfree.netlify.app") continuam.
+  if (url.hostname === DOMINIO_ANTIGO) {
+    return Response.redirect(`https://${DOMINIO_OFICIAL}${caminho}${url.search}`, 301);
+  }
 
   // Livres: o robots.txt (Disallow: /) precisa chegar a quem o respeita; o
   // icone e o manifesto sao pedidos pelo navegador SEM cookie (o manifesto vai

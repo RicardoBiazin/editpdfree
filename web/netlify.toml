@@ -10,6 +10,8 @@
 
 # Portao anti-robo: prova de trabalho + cookie assinado (ver README).
 # Precisa da variavel PORTAO_SEGREDO no painel do Netlify.
+# Endereco oficial: editpdfree.biazin.com.br. O antigo (editpdfree.netlify.app)
+# e' redirecionado (301) pela propria Edge Function do portao, antes do desafio.
 [[edge_functions]]
   function = "portao"
   path = "/*"
