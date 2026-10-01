@@ -64,7 +64,7 @@ Desfazer/refazer (Ctrl+Z / Ctrl+Y) vale para todas as operações. Qualquer item
 
 ## Versão web
 
-Também dá para usar no navegador, sem instalar: **https://editpdfree.netlify.app** — o PDF é processado no seu computador e nunca é enviado a servidor nenhum. Código em [`web/`](web/).
+Também dá para usar no navegador, sem instalar: **https://editpdfree.biazin.com.br** — o PDF é processado no seu computador e nunca é enviado a servidor nenhum. Código em [`web/`](web/).
 
 ## Instalar
 
