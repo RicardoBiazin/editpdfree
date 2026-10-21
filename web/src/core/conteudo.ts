@@ -22,17 +22,7 @@ import {
 import { fmt, geometria, type Sessao } from "./documento.ts";
 import type { Cor } from "./anotacoes.ts";
 
-export type Familia = "helv" | "times" | "courier";
-
-const BASE14: Record<Familia, [string, string, string, string]> = {
-  helv: ["Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique"],
-  times: ["Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic"],
-  courier: ["Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique"],
-};
-
-export function nomeBase14(familia: Familia, negrito = false, italico = false): string {
-  return BASE14[familia][(negrito ? 1 : 0) + (italico ? 2 : 0)];
-}
+export { nomeBase14, type Familia } from "./trecho.ts";
 
 const WINANSI_EXTRA: Record<number, number> = {
   0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85, 0x2020: 0x86,

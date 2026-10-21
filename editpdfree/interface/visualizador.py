@@ -526,6 +526,14 @@ class Visualizador(QGraphicsView):
             return
         p0, p1 = a["inicio"], cena
         pequeno = (p1 - p0).manhattanLength() < 4
+        if tipo == "linha" and self.ferramenta is Ferramenta.EDITAR_TEXTO:
+            inicio = self.cena_para_pdf(pagina, p0)
+            if pequeno:
+                self.cliqueFeito.emit(self.ferramenta, pagina, inicio)
+            else:
+                self.linhaFeita.emit(self.ferramenta, pagina, inicio,
+                                     self.cena_para_pdf(pagina, p1))
+            return
         if tipo == "linha":
             if not pequeno:
                 self.linhaFeita.emit(self.ferramenta, pagina,

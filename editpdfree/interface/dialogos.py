@@ -404,26 +404,42 @@ class DialogoPropriedades(QDialog):
 
 # -- editar texto ---------------------------------------------------------------
 class DialogoEditarTexto(QDialog):
+    """`fontes`: [(valor, rotulo)]; o primeiro e' a fonte original."""
+
     def __init__(self, texto: str, tamanho: float, cor, fonte: str,
-                 parent=None, titulo: str = "Editar texto"):
+                 parent=None, titulo: str = "Editar texto", linha: str = "",
+                 fontes: list[tuple[str, str]] | None = None):
         super().__init__(parent)
         self.setWindowTitle(titulo)
-        self.resize(520, 0)
+        self.resize(560, 0)
         self.texto = QLineEdit(texto)
         self.texto.selectAll()
         self.tamanho = QDoubleSpinBox()
-        self.tamanho.setRange(3, 200)
-        self.tamanho.setDecimals(1)
+        self.tamanho.setRange(1, 500)
+        # Duas casas: o tamanho original quase nunca e' redondo (10,6 pt).
+        self.tamanho.setDecimals(2)
         self.tamanho.setValue(tamanho)
         self.cor = BotaoCor(cor)
+        self.fonte = QComboBox()
+        for valor, rotulo in fontes or [("original", f"Original ({fonte})")]:
+            self.fonte.addItem(rotulo, valor)
         form = QFormLayout(self)
-        form.addRow("Texto:", self.texto)
+        form.addRow("Texto selecionado:" if linha else "Texto:", self.texto)
+        if linha:
+            contexto = QLabel(f"Linha: {linha}")
+            contexto.setWordWrap(True)
+            form.addRow(contexto)
         form.addRow("Tamanho:", self.tamanho)
         form.addRow("Cor:", self.cor)
-        if fonte:
-            form.addRow(QLabel(f"Fonte original: {fonte}. O texto novo usa a "
-                               "fonte padrão mais parecida."))
-        form.addRow(_botoes(self))
+        form.addRow("Fonte:", self.fonte)
+        dica = QLabel("Só o que você mudar é reescrito, na fonte original do "
+                      "PDF. Letra que a fonte embutida não tem (ela costuma "
+                      "vir só com as letras usadas no documento) sai na fonte "
+                      "padrão mais parecida. Para editar só uma parte, "
+                      "arraste sobre ela na página.")
+        dica.setWordWrap(True)
+        form.addRow(dica)
+        form.addRow(_botoes(self, "Substituir"))
 
 
 # -- assinatura -----------------------------------------------------------------

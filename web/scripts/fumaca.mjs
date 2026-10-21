@@ -335,6 +335,26 @@ try {
   ok(await aguardar(`document.getElementById("contagemBusca").textContent === "1 de 1"`), "texto editado aparece na busca");
   await avaliar(`document.getElementById("btBuscaFechar").click(), true`);
 
+  // Arrastar sobre UMA palavra edita so' ela (o resto da linha fica).
+  await avaliar(`document.querySelectorAll('.pagina')[2].scrollIntoView(), true`);
+  await espera(300);
+  await avaliar(`document.querySelector('[data-ferramenta="editarTexto"]').click(), true`);
+  q = await pg3();
+  const helv = new mupdf.Font("Helvetica");
+  const larg = (t) => [...t].reduce((w, c) => w + helv.advanceGlyph(helv.encodeCharacter(c.codePointAt(0))) * 24, 0);
+  const xIni = 72 + larg("Página 3 "), xFim = xIni + larg("editada");
+  await arrastar(q[0] + (xIni + 2) * q[2], q[1] + 75 * q[2], q[0] + (xFim - 2) * q[2], q[1] + 75 * q[2]);
+  ok(await aguardar(`document.querySelector("dialog[open] input[type=text]")?.value === "editada"`),
+    "editar texto: arrastar seleciona só a palavra");
+  await captura("fumaca-5b-editar-selecao.png");
+  await noDialogo(`d.querySelector("input[type=text]").value = "alterada"`);
+  await confirmarDialogo();
+  await espera(300);
+  await tecla("f", "KeyF", 2, 70);
+  await avaliar(`(() => { const i = document.getElementById("inBusca"); i.value = "Página 3 alterada no navegador"; i.dispatchEvent(new Event("input")); return true; })()`);
+  ok(await aguardar(`document.getElementById("contagemBusca").textContent === "1 de 1"`), "só a palavra mudou e a linha continua inteira");
+  await avaliar(`document.getElementById("btBuscaFechar").click(), true`);
+
   await avaliar(`document.querySelectorAll('.pagina')[2].scrollIntoView(), true`);
   await espera(300);
   await avaliar(`document.querySelector('[data-ferramenta="assinatura"]').click(), true`);
@@ -412,9 +432,9 @@ try {
     const textos = [...Array(d.countPages()).keys()].map((i) => d.loadPage(i).toStructuredText().asText());
     const tudo = textos.join(" ");
     ok(d.countPages() === 3, "arquivo salvo: 3 páginas");
-    ok(/Pagina 2/.test(textos[0]) && /Pagina 1/.test(textos[1]) && /editada/.test(textos[2]),
+    ok(/Pagina 2/.test(textos[0]) && /Pagina 1/.test(textos[1]) && /alterada/.test(textos[2]),
       "arquivo salvo: ordem 2, 1, 3 (reordenar + excluir a cópia)");
-    ok(/Página 3 editada no navegador/.test(tudo), "arquivo salvo: texto editado com acento");
+    ok(/Página 3 alterada no navegador/.test(tudo), "arquivo salvo: texto editado com acento");
     ok((tudo.match(/Contrato/g) ?? []).length === 2, "arquivo salvo: o texto tarjado sumiu de verdade");
     ok(/CONFIDENCIAL/.test(tudo), "arquivo salvo: marca d’água");
     const tipos = [...Array(d.countPages()).keys()].flatMap((i) => d.loadPage(i).getAnnotations().map((a) => a.getType()));

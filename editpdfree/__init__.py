@@ -5,4 +5,4 @@ ela, e `tests/teste_base.py` confere.
 """
 
 NOME = "EditPDFree"
-VERSAO = "0.6.0"
+VERSAO = "0.7.0"

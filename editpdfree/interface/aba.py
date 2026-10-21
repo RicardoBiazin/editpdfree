@@ -52,13 +52,38 @@ def pedir_pasta(parent, titulo: str, pasta: str = "") -> str | None:
     return QFileDialog.getExistingDirectory(parent, titulo, pasta) or None
 
 
+_FAMILIAS = (("he", "Helvetica"), ("ti", "Times"), ("co", "Courier"))
+_VARIANTES = {"ro": "", "bo": " negrito", "it": " itálico",
+              "bi": " negrito itálico"}
+
+
+def fontes_para_edicao(trecho: texto.Trecho) -> list[tuple[str, str]]:
+    """A original e as Base-14 com o mesmo negrito/itálico."""
+    b14 = texto.fonte_base14(trecho)
+    sufixo = "ro" if b14 == "helv" else b14[2:]
+    opcoes = [("original", f"Original do PDF ({trecho.fonte})")]
+    for familia, nome in _FAMILIAS:
+        codigo = "helv" if (familia, sufixo) == ("he", "ro") else familia + sufixo
+        opcoes.append((codigo, nome + _VARIANTES[sufixo]))
+    return opcoes
+
+
 def pedir_edicao(parent, trecho: texto.Trecho):
-    """Devolve (texto, tamanho, cor) ou None."""
-    d = dialogos.DialogoEditarTexto(trecho.texto, trecho.tamanho, trecho.cor,
-                                    trecho.fonte, parent)
+    """Devolve (texto, tamanho, cor, fonte) ou None. Tamanho, cor e fonte
+    vem None quando nao mudaram: o resto da linha fica identico."""
+    d = dialogos.DialogoEditarTexto(
+        trecho.selecionado, trecho.tamanho, trecho.cor, trecho.fonte, parent,
+        linha=trecho.texto if trecho.parcial else "",
+        fontes=fontes_para_edicao(trecho))
     if d.exec() != d.DialogCode.Accepted:
         return None
-    return d.texto.text(), d.tamanho.value(), d.cor.cor
+    tamanho = d.tamanho.value()
+    if abs(tamanho - round(trecho.tamanho, 2)) < 1e-6:
+        tamanho = None
+    cor = None if tuple(d.cor.cor) == tuple(trecho.cor) else tuple(d.cor.cor)
+    fonte = d.fonte.currentData()
+    return (d.texto.text(), tamanho, cor,
+            None if fonte == "original" else fonte)
 
 
 def pedir_assinatura(parent) -> bytes | None:
@@ -334,19 +359,7 @@ class AbaDocumento(QWidget):
                 self._executar(texto.inserir_texto, d, pagina, ponto, valor,
                                tamanho=estilo.tamanho_fonte, cor=estilo.cor)
         elif ferramenta is Ferramenta.EDITAR_TEXTO:
-            trecho = texto.trecho_em(d, pagina, ponto)
-            if trecho is None:
-                self.mensagem.emit("Nenhum texto neste ponto.")
-                return
-            resposta = pedir_edicao(self, trecho)
-            if resposta is None:
-                return
-            novo, tamanho, cor = resposta
-            if (novo, tamanho, tuple(cor)) == (trecho.texto, trecho.tamanho,
-                                               tuple(trecho.cor)):
-                return
-            self._executar(texto.substituir_trecho, d, trecho, novo,
-                           tamanho=tamanho, cor=cor)
+            self._editar_texto(pagina, ponto)
         elif ferramenta is Ferramenta.ASSINATURA:
             self.colocar_assinatura(pagina, ponto)
         elif ferramenta is Ferramenta.CARIMBO:
@@ -380,7 +393,37 @@ class AbaDocumento(QWidget):
         self._executar(anotacoes.imagem, self.documento, pagina, r,
                        dados=dados, descricao="Assinar")
 
+    def _editar_texto(self, pagina: int, ponto: pymupdf.Point,
+                      ate: pymupdf.Point | None = None) -> None:
+        """Clique: a linha inteira. Arrasto (`ate`): so' o pedaco."""
+        trecho = texto.trecho_em(self.documento, pagina, ponto, ate)
+        if trecho is None:
+            self.mensagem.emit("Nenhum texto neste ponto.")
+            return
+        if not trecho.horizontal:
+            self.mensagem.emit("Só é possível editar texto horizontal.")
+            return
+        resposta = pedir_edicao(self, trecho)
+        if resposta is None:
+            return
+        novo, tamanho, cor, fonte = resposta
+        r = self._executar(texto.substituir_trecho, self.documento, trecho,
+                           novo, tamanho=tamanho, cor=cor, fonte=fonte)
+        if not isinstance(r, texto.ResultadoEdicao):
+            return
+        if not r.alterou:
+            self.mensagem.emit("Nada mudou.")
+        elif r.faltando:
+            self.mensagem.emit(f"A fonte original não tem “{r.faltando}”: "
+                               "essas letras saíram na fonte padrão mais "
+                               "parecida.")
+        if r.passou_da_pagina:
+            self.mensagem.emit("O fim da linha passou da borda da página.")
+
     def _linha(self, ferramenta: Ferramenta, pagina: int, inicio, fim) -> None:
+        if ferramenta is Ferramenta.EDITAR_TEXTO:
+            self._editar_texto(pagina, inicio, fim)
+            return
         self._executar(anotacoes.forma, self.documento, pagina,
                        ferramenta.value, inicio, fim, self._estilo())
 

@@ -38,6 +38,8 @@ meio escrito. Salvar sem alteração é no-op (não mexe na data do arquivo).
 | `anotacoes.py` | `insert_image` em página girada usa `rotate=page.rotation` (conferido renderizando: com `-rotation` a imagem sai de cabeça para baixo numa página a 90°). |
 | `extras.py` | Marca d'água: `morph=(ponto, Matrix(angulo))` com ângulo POSITIVO sobe para a direita na tela. O sinal foi conferido renderizando. |
 | `texto.py` | Editar redige a caixa da linha **encolhida 20% na vertical**: as caixas de linhas vizinhas se sobrepõem, e a caixa inteira arrancava pedaço da linha de cima. |
+| `texto.py` | Editar reescreve a linha **inteira**, caractere por caractere na fonte original (`extract_font` + `insert_font`), quando todos os glifos existem: reescrever só o pedaço trocado partia a linha em duas na extração de texto (busca e a próxima edição só achavam metade). |
+| `texto.py` | O nome da fonte no span (`NimbusRoman-Regular`) não bate com o do `get_fonts` (`Nimbus Roman Regular`): comparar por `_chave_fonte` (sem prefixo de subconjunto, só letras e números). O mesmo nome pode ter dois subconjuntos: procurar o glifo em todos. |
 | `aba.py` | Pedidos ao usuário passam pelas funções `pedir_*`/`avisar`/`confirmar` do módulo — os testes as trocam. Um diálogo modal em modo offscreen trava a suíte para sempre. |
 | `aba.py` | `_executar` devolve `FALHOU` (não `None`) quando a operação dá erro: `None` é retorno normal do núcleo. |
 | `aba.py` | Ao fechar a aba, parar os temporizadores e soltar o documento **antes** de fechá-lo; senão um render agendado dispara num PDF fechado. |

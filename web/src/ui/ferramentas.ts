@@ -13,7 +13,10 @@ import type { Motor } from "../rpc.ts";
 import type { Visor, PaginaVisor } from "./visor.ts";
 import type { InfoAnotacao, Estilo, TipoForma } from "../core/anotacoes.ts";
 import type { Campo } from "../core/formularios.ts";
-import type { Trecho } from "../core/texto.ts";
+import {
+  caixaSelecao, nomeBase14, selecionarFaixa, textoSelecionado, type Trecho,
+} from "../core/trecho.ts";
+import type { ResultadoEdicao } from "../core/texto.ts";
 import type { Resultado } from "../core/seguranca.ts";
 import { normalizar, type Ponto, type Retangulo } from "../core/coordenadas.ts";
 import { avisar, campo, confirmar, dialogo, el, pedirTexto } from "./dialogos.ts";
@@ -461,7 +464,11 @@ export class Ferramentas {
       this.gestoCaneta(p, ev);
       return;
     }
-    if (f === "nota" || f === "texto" || f === "editarTexto" || f === "carimbo") {
+    if (f === "editarTexto") {
+      this.gestoEditarTexto(p, pt.pagina, pt.local);
+      return;
+    }
+    if (f === "nota" || f === "texto" || f === "carimbo") {
       const soltar = () => {
         p.camada.removeEventListener("pointerup", soltar);
         this.clique(p, pt.pagina);
@@ -470,6 +477,66 @@ export class Ferramentas {
       return;
     }
     if (ARRASTAR.has(f)) this.gestoArrastar(p, pt.pagina, pt.local);
+  }
+
+  /** Editar texto: clique edita a linha inteira; arrastar sobre a linha
+   *  seleciona so' aquele pedaco (destacado enquanto arrasta). */
+  private gestoEditarTexto(p: PaginaVisor, inicio: Ponto, local0: Ponto): void {
+    // undefined: a linha ainda nao chegou do motor.
+    let linha: Trecho | null | undefined;
+    let fim = inicio, localFim = local0, solto = false, cancelado = false;
+    const caixa = el("div", { classe: "selecao-trecho" });
+    const arrastou = () => Math.hypot(localFim[0] - local0[0], localFim[1] - local0[1]) > 4;
+    const atual = () => (linha && arrastou() ? selecionarFaixa(linha, inicio[0], fim[0]) : linha ?? null);
+    const desenhar = () => {
+      const t = atual();
+      if (!t || !arrastou()) { caixa.remove(); return; }
+      posicionar(caixa, p, caixaSelecao(t));
+      if (!caixa.isConnected) p.extras.append(caixa);
+    };
+    const concluir = async () => {
+      caixa.remove();
+      const t = atual();
+      if (!t) {
+        avisar("Nenhuma linha de texto aqui. Clique sobre o texto que quer editar.");
+        return;
+      }
+      if (!t.horizontal) {
+        avisar("Só é possível editar texto horizontal.", "erro");
+        return;
+      }
+      await this.dialogoEditar(p, t);
+    };
+    void this.c.motor.pedir<Trecho | null>("trechoEm", { pagina: p.indice, ponto: inicio })
+      .catch(() => null).then((t) => {
+        if (cancelado) return;
+        linha = t;
+        if (solto) void concluir(); else desenhar();
+      });
+    const mover = (ev: PointerEvent) => {
+      const pt = this.c.visor.pontoDoEvento(p, ev);
+      fim = pt.pagina;
+      localFim = pt.local;
+      desenhar();
+    };
+    const parar = () => {
+      p.camada.removeEventListener("pointermove", mover);
+      p.camada.removeEventListener("pointerup", soltar);
+      p.camada.removeEventListener("pointercancel", cancelar);
+    };
+    const soltar = () => {
+      parar();
+      solto = true;
+      if (linha !== undefined) void concluir();
+    };
+    const cancelar = () => {
+      parar();
+      caixa.remove();
+      cancelado = true;
+    };
+    p.camada.addEventListener("pointermove", mover);
+    p.camada.addEventListener("pointerup", soltar);
+    p.camada.addEventListener("pointercancel", cancelar);
   }
 
   private gestoArrastar(p: PaginaVisor, inicio: Ponto, local0: Ponto): void {
@@ -657,17 +724,6 @@ export class Ferramentas {
       await this.dialogoTexto(i, pt);
     } else if (this.atual === "carimbo") {
       await this.c.operar("carimbo", { pagina: i, centro: pt, texto: this.carimboTexto, cor: estilo.cor });
-    } else if (this.atual === "editarTexto") {
-      const t = await this.c.motor.pedir<Trecho | null>("trechoEm", { pagina: i, ponto: pt }).catch(() => null);
-      if (!t) {
-        avisar("Nenhuma linha de texto aqui. Clique sobre o texto que quer editar.");
-        return;
-      }
-      if (!t.horizontal) {
-        avisar("Só é possível editar texto horizontal.", "erro");
-        return;
-      }
-      await this.dialogoEditar(p, t);
     }
   }
 
@@ -694,25 +750,54 @@ export class Ferramentas {
 
   private async dialogoEditar(p: PaginaVisor, t: Trecho): Promise<void> {
     const caixa = el("div", { classe: "selecao-trecho" });
-    posicionar(caixa, p, t.rect);
+    posicionar(caixa, p, caixaSelecao(t));
     p.extras.append(caixa);
-    const texto = el("input", { type: "text", value: t.texto });
-    const tamanho = el("input", { type: "number", min: "4", max: "144", step: "0.5", value: String(Math.round(t.tamanho * 10) / 10) });
+    const parte = t.inicio > 0 || t.fim < t.caracteres.length;
+    const selecionado = textoSelecionado(t);
+    const texto = el("input", { type: "text", value: selecionado });
+    // step "any": o tamanho original quase nunca e' multiplo de 0,5 (10,6 pt).
+    const tamOriginal = String(Math.round(t.tamanho * 100) / 100);
+    const tamanho = el("input", { type: "number", min: "1", max: "500", step: "any", value: tamOriginal });
     const hex = "#" + t.cor.map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
     const cor = el("input", { type: "color", value: hex });
-    const familia = { helv: "Helvetica", times: "Times", courier: "Courier" }[t.familia];
-    const { valor } = await dialogo("Editar texto", [
-      campo("Texto da linha", texto),
+    const fonte = el("select", { name: "fonte" });
+    const nomeOriginal = t.fonte.replace(/^[A-Z]{6}\+/, "");
+    const opcoesFonte: [string, string][] = [["original", `Original do PDF (${nomeOriginal})`],
+      ...(["helv", "times", "courier"] as const).map((f): [string, string] => {
+        const n = nomeBase14(f, t.negrito, t.italico);
+        return [n, n.replace("-", " ")];
+      })];
+    for (const [v, r] of opcoesFonte) fonte.append(el("option", { value: v, textContent: r }));
+    const corpo = [
+      campo(parte ? "Texto selecionado" : "Texto da linha", texto),
+      ...(parte ? [el("p", { classe: "dica", textContent: `Linha: ${t.texto}` })] : []),
       el("div", { classe: "linha-campos" }, campo("Tamanho", tamanho), campo("Cor", cor)),
-      el("p", { classe: "dica", textContent: `Fonte original: ${t.fonte}. O texto novo usa ${familia}${t.negrito ? " negrito" : ""}${t.italico ? " itálico" : ""} (a fonte embutida no PDF quase nunca tem todas as letras).` }),
-    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Substituir", valor: "ok", primario: true }],
-    () => { texto.focus(); texto.select(); });
+      campo("Fonte", fonte),
+      el("p", { classe: "dica", textContent: "Só o que você mudar é reescrito, na fonte original do PDF. "
+        + "Letra que a fonte embutida não tem (ela costuma vir só com as letras usadas no documento) sai na fonte padrão mais parecida. "
+        + "Para editar só uma parte, arraste sobre ela na página." }),
+    ];
+    const { valor } = await dialogo("Editar texto", corpo,
+      [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Substituir", valor: "ok", primario: true }],
+      () => { texto.focus(); texto.select(); },
+      () => (tamanho.value && !(Number(tamanho.value) > 0) ? "Tamanho inválido." : null));
     caixa.remove();
     if (valor !== "ok") return;
-    const c = cor.value;
-    const rgb = [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16) / 255);
-    await this.c.operar("substituirTrecho", { trecho: t, novo: texto.value,
-      opcoes: { tamanho: Number(tamanho.value) || t.tamanho, cor: rgb } });
+    // So' vai como alteracao o que o usuario mexeu: o resto fica identico.
+    const opcoes: { tamanho?: number; cor?: number[]; fonte?: string } = {};
+    if (tamanho.value && tamanho.value !== tamOriginal) opcoes.tamanho = Number(tamanho.value);
+    if (cor.value.toLowerCase() !== hex) {
+      opcoes.cor = [1, 3, 5].map((k) => parseInt(cor.value.slice(k, k + 2), 16) / 255);
+    }
+    if (fonte.value !== "original") opcoes.fonte = fonte.value;
+    const r = await this.c.operar("substituirTrecho", { trecho: t, novo: texto.value, opcoes });
+    if (r === FALHOU || !r) return;
+    const res = r as ResultadoEdicao;
+    if (!res.alterou) avisar("Nada mudou.");
+    else if (res.faltando) {
+      avisar(`A fonte original não tem “${res.faltando}”: essas letras saíram em ${nomeBase14(t.familia, t.negrito, t.italico)}.`);
+    }
+    if (res.passouDaPagina) avisar("O fim da linha passou da borda da página.", "erro");
   }
 
   private corCss(): string {

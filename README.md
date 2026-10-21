@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.6.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.7.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
@@ -13,7 +13,7 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 - Juntar vários PDFs, imagens e documentos do Office num só, **escolhendo a ordem**: miniatura de cada arquivo, arrastar para reordenar (ou soltar arquivos do Explorer), ordenar por nome ou data, inverter, escolher as páginas de cada arquivo e criar um marcador por arquivo; inclui as abas já abertas
 
 **Texto**
-- **Editar o texto que já está no PDF**: clique numa linha, altere o texto, o tamanho e a cor
+- **Editar o texto que já está no PDF**: clique numa linha para alterá-la inteira, ou arraste sobre parte dela para alterar só aquele pedaço. O texto novo sai na **fonte original** do PDF e no tamanho exato; só o que mudou é reescrito (o resto da linha fica idêntico). Dá para trocar tamanho, cor e fonte
 - Adicionar texto novo em qualquer ponto da página
 - Substituir um texto em todo o documento
 - Localizar com realce dos resultados (Ctrl+F)
@@ -95,7 +95,8 @@ build.bat umarquivo    :: dist\EditPDFree.exe portátil
 
 ## Limitações conhecidas
 
-- Ao editar um texto existente, o texto novo usa a fonte padrão mais parecida (Helvetica, Times ou Courier). A fonte original quase sempre vem embutida só com as letras usadas e não serve para letras novas.
+- Ao editar um texto existente, a fonte embutida no PDF quase sempre vem só com as letras usadas no documento: uma letra que ela não tem (ex.: “Ç” maiúsculo num texto que nunca o usou) sai na fonte padrão mais parecida (Helvetica, Times ou Courier), e o programa avisa quais. Fonte só nomeada no PDF (não embutida) também vai na fonte padrão.
+- Editar não refaz o parágrafo: se o texto novo for mais comprido, o resto da linha anda para a direita (o programa avisa se passar da borda da página).
 - Só é possível editar texto horizontal.
 - Salvar um PDF assinado digitalmente invalida a assinatura (o programa avisa antes).
 - A assinatura digital não consulta revogação (LCR/OCSP) nem acrescenta carimbo de tempo; para a validação jurídica completa use o [validador do ITI](https://validar.iti.gov.br). A assinatura visível não funciona em página girada (use a invisível).

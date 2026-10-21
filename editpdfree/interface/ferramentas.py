@@ -48,7 +48,9 @@ INFO: dict[Ferramenta, tuple[str, str, Gesto, str]] = {
     Ferramenta.ADICIONAR_TEXTO: ("Adicionar texto", "Clique onde o texto "
                                  "novo deve começar", Gesto.CLIQUE, "T"),
     Ferramenta.EDITAR_TEXTO: ("Editar texto", "Clique numa linha de texto "
-                              "do PDF para alterá-la", Gesto.CLIQUE, "E"),
+                              "do PDF para alterá-la, ou arraste sobre parte "
+                              "dela para alterar só aquele pedaço",
+                              Gesto.LINHA, "E"),
     Ferramenta.CAIXA_TEXTO: ("Caixa de texto", "Arraste para criar uma "
                              "caixa de texto (anotação)", Gesto.RETANGULO, "X"),
     Ferramenta.NOTA: ("Nota", "Clique para fixar uma nota", Gesto.CLIQUE, "N"),

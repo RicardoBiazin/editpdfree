@@ -178,11 +178,21 @@ def gestos(pasta) -> None:
     arrastar(v, cena_de_pdf(v, 0, 300, 200), cena_de_pdf(v, 0, 500, 240))
     checa("FreeText" in tipos(d), "caixa de texto")
 
-    modulo_aba.pedir_edicao = lambda _p, t: ("Linha EDITADA", t.tamanho, t.cor)
+    modulo_aba.pedir_edicao = lambda _p, t: ("Linha EDITADA", None, None, None)
     j.definir_ferramenta(Ferramenta.EDITAR_TEXTO)
     clicar(v, cena_de_pdf(v, 0, 90, 96))
     checa("Linha EDITADA" in texto_da_pagina(d, 0), "editar texto pelo clique")
     checa("para editar" not in texto_da_pagina(d, 0), "texto antigo saiu")
+    # Arrastar sobre uma palavra edita so' ela.
+    vistos = []
+    modulo_aba.pedir_edicao = lambda _p, t: (vistos.append(t.selecionado)
+                                             or ("ALTERADA", None, None, None))
+    x0 = 72 + pymupdf.get_text_length("Linha ", fontsize=12)
+    x1 = x0 + pymupdf.get_text_length("EDITADA", fontsize=12)
+    arrastar(v, cena_de_pdf(v, 0, x0 + 1, 96), cena_de_pdf(v, 0, x1 - 1, 96))
+    checa_igual(vistos, ["EDITADA"], "arrastar seleciona só a palavra")
+    checa("Linha ALTERADA" in texto_da_pagina(d, 0),
+          "só a palavra mudou e a linha continua inteira")
 
     # Assinatura: o primeiro clique pede o desenho; o segundo reaproveita.
     img = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 20), False)
@@ -230,7 +240,7 @@ def gestos(pasta) -> None:
     checa(j.salvar(), "salvar")
     checa("•" not in j.abas.tabText(0), "marca de modificado sai ao salvar")
     with pymupdf.open(arquivo) as c:
-        checa("Linha EDITADA" in c[0].get_text(), "edicao gravada no disco")
+        checa("Linha ALTERADA" in c[0].get_text(), "edicao gravada no disco")
     encerrar(j)
 
 
