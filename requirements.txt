@@ -19,7 +19,7 @@ PySide6-Essentials==6.11.2
 pyHanko==0.37.0
 pyhanko-certvalidator==0.32.1
 # Fixadas para a auditoria enxergar as versoes (vem com o pyHanko).
-cryptography==50.0.1
+cryptography==50.0.2
 asn1crypto==1.5.1
 
 # PDF -> Word. MIT. Arrasta lxml.
@@ -30,7 +30,7 @@ lxml==6.1.3
 # XlsxWriter; o Pillow tambem gera o perfil de cor sRGB do PDF/A.
 python-pptx==1.0.2
 openpyxl==3.1.5
-pillow==12.3.0
+pillow==13.0.0
 
 # Scanner pelo WIA do Windows (COM). MIT.
 comtypes==1.4.17

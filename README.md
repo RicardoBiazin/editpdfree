@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.7.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.7.1-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
