@@ -10,14 +10,19 @@
 # Motor PDF (MuPDF). AGPL-3.0 -- e' por causa dele que este projeto e' AGPL.
 # Traz o Tesseract compilado dentro: o OCR so' precisa de recursos/tessdata.
 pymupdf==1.28.2
+# NAO subir para 2.0 sem conferir: na 2.0 o find_tables parte "1.234,50" em
+# '1 234 50
+. ,' (pontuacao vira outra linha) e o PDF -> Excel perde o numero.
 
 # Interface grafica. LGPLv3. NAO usar o metapacote 'PySide6': ele arrasta
 # PySide6-Addons, um wheel de ~170 MB com QtWebEngine que nao usamos.
 PySide6-Essentials==6.11.2
+# NAO subir para 6.12.0: teste_atalhos.py termina com falha de acesso (139/127)
+# em ~3 de 8 execucoes, depois de passar tudo; 6.11.2 nunca (24/10/2026).
 
 # Assinatura digital PAdES com certificado A1 (.pfx). MIT.
-pyHanko==0.37.0
-pyhanko-certvalidator==0.32.1
+pyHanko==0.38.0
+pyhanko-certvalidator==0.33.0
 # Fixadas para a auditoria enxergar as versoes (vem com o pyHanko).
 cryptography==50.0.2
 asn1crypto==1.5.1
