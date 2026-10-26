@@ -17,7 +17,7 @@ from typing import Sequence
 
 import pymupdf
 
-from . import fontes
+from . import fontes, itens
 from .documento import Documento
 
 Cor = tuple[float, float, float]
@@ -162,7 +162,7 @@ def forma(d: Documento, pagina: int, tipo: str, inicio: pymupdf.Point,
 def imagem(d: Documento, pagina: int, rect: pymupdf.Rect, *,
            arquivo: str | os.PathLike | None = None,
            dados: bytes | None = None,
-           descricao: str = "Inserir imagem") -> None:
+           descricao: str = "Inserir imagem") -> int | None:
     """Imagem no conteudo da pagina, mantendo a proporcao dentro de `rect`.
 
     Em pagina girada a imagem recebe a MESMA rotacao da pagina, senao aparece
@@ -171,9 +171,17 @@ def imagem(d: Documento, pagina: int, rect: pymupdf.Rect, *,
     a imagem sai invertida 180 graus numa pagina a 90.)"""
     p = d.doc[pagina]
     with d.operacao(descricao):
-        p.insert_image(pymupdf.Rect(rect), filename=str(arquivo) if arquivo
-                       else None, stream=dados, keep_proportion=True,
-                       rotate=p.rotation)
+        antes = p.get_contents()
+        img = p.insert_image(pymupdf.Rect(rect), filename=str(arquivo)
+                             if arquivo else None, stream=dados,
+                             keep_proportion=True, rotate=p.rotation)
+        # Fica como item movel (ver `itens`), com a caixa onde a imagem
+        # realmente ficou (a proporcao encolhe o retangulo pedido).
+        caixas = [pymupdf.Rect(i["bbox"]) for i in p.get_image_info(xrefs=True)
+                  if i.get("xref") == img]
+        caixa = caixas[-1] if caixas else pymupdf.Rect(rect)
+        return itens.registrar(p, antes, "Assinatura" if descricao == "Assinar"
+                               else "Imagem", caixa)
 
 
 def anotacao_em(pagina: pymupdf.Page, ponto: pymupdf.Point,
@@ -206,7 +214,38 @@ def _achar(d: Documento, pagina: int,
     return p, a
 
 
+def objeto_em(pagina: pymupdf.Page, ponto: pymupdf.Point, folga: float = 3.0,
+              so_moveis: bool = False) -> int | None:
+    """xref da anotacao -- ou, sem anotacao ali, do item inserido (ver
+    `itens`) -- sob o ponto."""
+    a = anotacao_em(pagina, ponto, folga)
+    if a is not None and not (so_moveis and _eh_marcacao(a)):
+        return a.xref
+    return itens.item_em(pagina, ponto, folga)
+
+
+def caixa_de(pagina: pymupdf.Page, xref: int) -> pymupdf.Rect | None:
+    """Retangulo da anotacao ou do item (espaco PDF)."""
+    try:
+        a = pagina.load_annot(xref)
+    except Exception:                             # noqa: BLE001
+        a = None
+    if a is not None:
+        return pymupdf.Rect(a.rect)
+    return itens.caixa_do_item(pagina, xref)
+
+
+def _eh_marcacao(a: pymupdf.Annot) -> bool:
+    return a.type[0] in (pymupdf.PDF_ANNOT_HIGHLIGHT,
+                         pymupdf.PDF_ANNOT_UNDERLINE,
+                         pymupdf.PDF_ANNOT_STRIKE_OUT,
+                         pymupdf.PDF_ANNOT_SQUIGGLY)
+
+
 def excluir_anotacao(d: Documento, pagina: int, xref: int) -> None:
+    if itens.eh_item(d.doc[pagina], xref):
+        itens.excluir(d, pagina, xref)
+        return
     with d.operacao("Excluir anotação"):
         p, a = _achar(d, pagina, xref)
         p.delete_annot(a)
@@ -228,10 +267,11 @@ def mover_anotacao(d: Documento, pagina: int, xref: int, dx: float,
     guarda y de BAIXO para cima -- o dy da tela entra com o sinal trocado."""
     if abs(dx) < 0.01 and abs(dy) < 0.01:
         return
+    if itens.eh_item(d.doc[pagina], xref):
+        itens.mover(d, pagina, xref, dx, dy)
+        return
     _p, a = _achar(d, pagina, xref)
-    if a.type[0] in (pymupdf.PDF_ANNOT_HIGHLIGHT, pymupdf.PDF_ANNOT_UNDERLINE,
-                     pymupdf.PDF_ANNOT_STRIKE_OUT,
-                     pymupdf.PDF_ANNOT_SQUIGGLY):
+    if _eh_marcacao(a):
         raise ValueError("Marcações de texto ficam presas ao texto.")
     with d.operacao("Mover anotação"):
         doc = d.doc

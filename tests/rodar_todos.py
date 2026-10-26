@@ -25,6 +25,7 @@ SUITES = [
     ("teste_paginas.py", "girar, mover, excluir, inserir, juntar, dividir"),
     ("teste_anotacoes.py", "texto, destaque, formas, caneta, imagem, mover"),
     ("teste_texto.py", "editar texto existente, substituir, extrair"),
+    ("teste_itens.py", "texto/imagem/assinatura inseridos continuam moveis"),
     ("teste_seguranca.py", "tarja de verdade e formularios"),
     ("teste_extras.py", "marca d'agua, numeracao, compressao, exportacao"),
     ("teste_interface.py", "janela: abas, gestos do mouse, teclas, busca"),

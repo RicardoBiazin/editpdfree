@@ -304,8 +304,8 @@ class AbaDocumento(QWidget):
                 if rect.width < 5 or rect.height < 5:
                     rect = pymupdf.Rect(rect.x0, rect.y0, rect.x0 + 200,
                                         rect.y0 + 200)
-                self._executar(anotacoes.imagem, d, pagina, rect,
-                               arquivo=arquivo)
+                self._selecionar_novo(pagina, self._executar(
+                    anotacoes.imagem, d, pagina, rect, arquivo=arquivo))
         elif ferramenta is Ferramenta.TARJAR:
             self._executar(seguranca.tarjar, d, [(pagina, rect)])
         elif ferramenta is Ferramenta.LINK:
@@ -356,8 +356,9 @@ class AbaDocumento(QWidget):
         elif ferramenta is Ferramenta.ADICIONAR_TEXTO:
             valor = pedir_texto(self, "Adicionar texto", "Texto:")
             if valor:
-                self._executar(texto.inserir_texto, d, pagina, ponto, valor,
-                               tamanho=estilo.tamanho_fonte, cor=estilo.cor)
+                self._selecionar_novo(pagina, self._executar(
+                    texto.inserir_texto, d, pagina, ponto, valor,
+                    tamanho=estilo.tamanho_fonte, cor=estilo.cor))
         elif ferramenta is Ferramenta.EDITAR_TEXTO:
             self._editar_texto(pagina, ponto)
         elif ferramenta is Ferramenta.ASSINATURA:
@@ -390,8 +391,14 @@ class AbaDocumento(QWidget):
                          girado.x + largura / 2, girado.y + altura / 2)
         r = r * p.derotation_matrix
         r.normalize()
-        self._executar(anotacoes.imagem, self.documento, pagina, r,
-                       dados=dados, descricao="Assinar")
+        self._selecionar_novo(pagina, self._executar(
+            anotacoes.imagem, self.documento, pagina, r, dados=dados,
+            descricao="Assinar"))
+
+    def _selecionar_novo(self, pagina: int, xref) -> None:
+        """Recem-inserido fica selecionado, pronto para arrastar."""
+        if isinstance(xref, int):
+            self.visualizador.selecionar_anotacao(pagina, xref)
 
     def _editar_texto(self, pagina: int, ponto: pymupdf.Point,
                       ate: pymupdf.Point | None = None) -> None:

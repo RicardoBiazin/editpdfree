@@ -17,6 +17,7 @@ import {
   type Ponto, type Quad, type Retangulo,
 } from "./coordenadas.ts";
 import { geometria, rotacaoDaPagina, type Sessao } from "./documento.ts";
+import { ehItemDaPagina, excluirItem, listarItens, moverItem } from "./conteudo.ts";
 
 export type Cor = [number, number, number];
 
@@ -72,6 +73,11 @@ export function listarAnotacoes(p: mupdf.PDFPage): InfoAnotacao[] {
       movel: !MARCACOES.has(tipo),
       texto: a.getContents() ?? "",
     });
+  }
+  // Texto/imagem/assinatura inseridos no conteudo: selecionaveis e moveis
+  // como as anotacoes (o id e' o numero do objeto do fluxo).
+  for (const it of listarItens(p)) {
+    lista.push({ id: it.id, tipo: "Item" + it.tipo, nome: it.nome, limites: it.limites, movel: true, texto: "" });
   }
   return lista;
 }
@@ -259,6 +265,7 @@ export function anotacaoEm(p: mupdf.PDFPage, ponto: Ponto, folga = 3): InfoAnota
 }
 
 export function excluirAnotacao(s: Sessao, pagina: number, id: number): void {
+  if (ehItemDaPagina(s.pagina(pagina), id)) return excluirItem(s, pagina, id);
   s.operacao("Excluir anotação", () => {
     const p = s.pagina(pagina);
     const a = acharAnotacao(p, id);
@@ -278,6 +285,7 @@ export function excluirAnotacao(s: Sessao, pagina: number, id: number): void {
  */
 export function moverAnotacao(s: Sessao, pagina: number, id: number, dx: number, dy: number): void {
   if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+  if (ehItemDaPagina(s.pagina(pagina), id)) return moverItem(s, pagina, id, dx, dy);
   const p0 = s.pagina(pagina);
   const tipo = acharAnotacao(p0, id).getType();
   if (MARCACOES.has(tipo)) throw new Error("Marcações de texto ficam presas ao texto.");

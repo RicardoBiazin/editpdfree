@@ -26,6 +26,11 @@ from .. import coordenadas
 from ..documento import Documento
 from .ferramentas import Ferramenta, Gesto, gesto
 
+#: Ferramentas que inserem algo: apertar sobre o que ja' foi inserido arrasta.
+_INSERIR = frozenset({Ferramenta.ADICIONAR_TEXTO, Ferramenta.IMAGEM,
+                      Ferramenta.ASSINATURA, Ferramenta.CARIMBO,
+                      Ferramenta.NOTA, Ferramenta.CAIXA_TEXTO})
+
 ESPACO = 14          # entre paginas, em pixels de cena
 MARGEM = 20
 ZOOM_MIN, ZOOM_MAX = 0.1, 8.0
@@ -359,12 +364,13 @@ class Visualizador(QGraphicsView):
         if not self._selecionada or self.documento is None:
             return
         pagina, xref = self._selecionada
+        from .. import anotacoes
         p = self.documento.doc[pagina]     # referencia viva: ver anotacoes._achar
-        a = p.load_annot(xref)
-        if a is None:
+        caixa = anotacoes.caixa_de(p, xref)
+        if caixa is None:
             self._selecionada = None
             return
-        item = QGraphicsRectItem(self._rect_para_cena(pagina, a.rect)
+        item = QGraphicsRectItem(self._rect_para_cena(pagina, caixa)
                                  .adjusted(-3, -3, 3, 3))
         item.setPen(QPen(QColor(0, 120, 215), 1.5, Qt.PenStyle.DashLine))
         item.setZValue(10)
@@ -415,6 +421,9 @@ class Visualizador(QGraphicsView):
         if self.ferramenta is Ferramenta.SELECIONAR:
             self._pressionar_selecao(pagina, cena, ponto_pdf)
             return
+        if self.ferramenta in _INSERIR and self._pegar_inserido(
+                pagina, cena, ponto_pdf):
+            return
         if g is Gesto.CLIQUE:
             self.cliqueFeito.emit(self.ferramenta, pagina, ponto_pdf)
             return
@@ -440,15 +449,30 @@ class Visualizador(QGraphicsView):
         self._arrasto = {"tipo": g.value, "pagina": pagina, "item": item,
                          "inicio": cena}
 
+    def _pegar_inserido(self, pagina: int, cena: QPointF,
+                        ponto_pdf: pymupdf.Point) -> bool:
+        """Com uma ferramenta de inserir, apertar sobre algo ja' inserido o
+        seleciona e arrasta (em vez de inserir outro por cima)."""
+        from .. import anotacoes
+        p = self.documento.doc[pagina]
+        xref = anotacoes.objeto_em(p, ponto_pdf, folga=3 / self.zoom,
+                                   so_moveis=True)
+        if xref is None:
+            return False
+        self.selecionar_anotacao(pagina, xref)
+        self._arrasto = {"tipo": "mover", "pagina": pagina, "xref": xref,
+                         "inicio": cena, "item": None}
+        return True
+
     def _pressionar_selecao(self, pagina: int, cena: QPointF,
                             ponto_pdf: pymupdf.Point) -> None:
         from .. import anotacoes, formularios
         p = self.documento.doc[pagina]
-        a = anotacoes.anotacao_em(p, ponto_pdf, folga=3 / self.zoom)
-        if a is not None:
-            self.selecionar_anotacao(pagina, a.xref)
+        xref = anotacoes.objeto_em(p, ponto_pdf, folga=3 / self.zoom)
+        if xref is not None:
+            self.selecionar_anotacao(pagina, xref)
             self._arrasto = {"tipo": "mover", "pagina": pagina,
-                             "xref": a.xref, "inicio": cena, "item": None}
+                             "xref": xref, "inicio": cena, "item": None}
             return
         from .. import marcadores
         link = marcadores.link_em(self.documento, pagina, ponto_pdf)
@@ -568,8 +592,8 @@ class Visualizador(QGraphicsView):
         ponto = self.cena_para_pdf(pagina, cena)
         from .. import marcadores
         p = self.documento.doc[pagina]     # referencia viva: ver anotacoes._achar
-        a = anotacoes.anotacao_em(p, ponto, folga=3 / self.zoom)
-        if a is None:
+        xref = anotacoes.objeto_em(p, ponto, folga=3 / self.zoom)
+        if xref is None:
             link = marcadores.link_em(self.documento, pagina, ponto)
             if link is None:
                 return
@@ -582,11 +606,11 @@ class Visualizador(QGraphicsView):
             elif escolhida is excluir:
                 self.linkAcionado.emit(pagina, link, "excluir")
             return
-        self.selecionar_anotacao(pagina, a.xref)
+        self.selecionar_anotacao(pagina, xref)
         menu = QMenu(self)
-        excluir = menu.addAction("Excluir anotação")
+        excluir = menu.addAction("Excluir")
         if menu.exec(evento.globalPosition().toPoint()) is excluir:
-            self.anotacaoExcluir.emit(pagina, a.xref)
+            self.anotacaoExcluir.emit(pagina, xref)
 
     def keyPressEvent(self, evento) -> None:              # noqa: N802
         if evento.key() == Qt.Key.Key_Escape:

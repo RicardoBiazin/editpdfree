@@ -101,6 +101,9 @@ function posicionar(e: HTMLElement, p: PaginaVisor, r: Retangulo): void {
 
 const SVG = "http://www.w3.org/2000/svg";
 
+/** Ferramentas que inserem algo: apertar sobre o que ja' foi inserido arrasta. */
+const INSERIR = new Set<NomeFerramenta>(["texto", "imagem", "assinatura", "carimbo", "nota", "caixaTexto"]);
+
 export class Ferramentas {
   private c: Contexto;
   atual: NomeFerramenta = "selecionar";
@@ -436,15 +439,23 @@ export class Ferramentas {
     if (ev.button !== 0 && ev.pointerType === "mouse") return;
     const pt = this.c.visor.pontoDoEvento(p, ev);
     const f = this.atual;
-    if (f === "selecionar") {
-      const lista = this.anotacoes.get(p.indice)?.lista ?? [];
-      let achada: InfoAnotacao | null = null;
-      const folga = 4 / this.c.visor.escalaCss;
-      for (const a of lista) {
-        const r = a.limites;
-        if (pt.pagina[0] >= r[0] - folga && pt.pagina[0] <= r[2] + folga
-          && pt.pagina[1] >= r[1] - folga && pt.pagina[1] <= r[3] + folga) achada = a;
+    // Com uma ferramenta de inserir, apertar sobre algo ja' inserido o arrasta
+    // (em vez de inserir outro por cima).
+    if (INSERIR.has(f)) {
+      const achada = this.anotacaoEm(p, pt.pagina, true);
+      if (achada) {
+        this.selecionar(p, achada);
+        if (ev.pointerType === "mouse") {
+          const caixa = p.extras.querySelector(".selecao-anot") as HTMLElement;
+          ev.preventDefault();
+          this.arrastarSelecao(p, achada, caixa, ev);
+        }
+        return;
       }
+      this.desselecionar();
+    }
+    if (f === "selecionar") {
+      const achada = this.anotacaoEm(p, pt.pagina);
       if (achada) {
         this.selecionar(p, achada);
         // Com mouse, ja' permite arrastar direto.
@@ -481,6 +492,29 @@ export class Ferramentas {
 
   /** Editar texto: clique edita a linha inteira; arrastar sobre a linha
    *  seleciona so' aquele pedaco (destacado enquanto arrasta). */
+  /** A anotacao (ou item inserido) sob o ponto; a de cima, se houver varias. */
+  private anotacaoEm(p: PaginaVisor, pt: Ponto, soMoveis = false): InfoAnotacao | null {
+    const lista = this.anotacoes.get(p.indice)?.lista ?? [];
+    let achada: InfoAnotacao | null = null;
+    const folga = 4 / this.c.visor.escalaCss;
+    for (const a of lista) {
+      if (soMoveis && !a.movel) continue;
+      const r = a.limites;
+      if (pt[0] >= r[0] - folga && pt[0] <= r[2] + folga
+        && pt[1] >= r[1] - folga && pt[1] <= r[3] + folga) achada = a;
+    }
+    return achada;
+  }
+
+  /** Recem-inserido: fica selecionado, pronto para arrastar. */
+  private async selecionarNovo(pagina: number, id: unknown): Promise<void> {
+    if (typeof id !== "number") return;
+    const lista = await this.c.motor.pedir<InfoAnotacao[]>("anotacoes", { pagina }).catch(() => []);
+    const p = this.c.visor.paginas[pagina];
+    const a = lista.find((x) => x.id === id);
+    if (p && a) this.selecionar(p, a);
+  }
+
   private gestoEditarTexto(p: PaginaVisor, inicio: Ponto, local0: Ponto): void {
     // undefined: a linha ainda nao chegou do motor.
     let linha: Trecho | null | undefined;
@@ -635,9 +669,10 @@ export class Ferramentas {
           }
         }
         const copia = bytes.slice();
-        await this.c.operar("inserirImagem", { pagina: i, rect: r, bytes: copia.buffer,
+        const id = await this.c.operar("inserirImagem", { pagina: i, rect: r, bytes: copia.buffer,
           descricao: f === "assinatura" ? "Assinatura" : "Inserir imagem" }, [copia.buffer]);
-        if (f === "assinatura") void this.definir("selecionar");
+        if (f === "assinatura") await this.definir("selecionar");
+        await this.selecionarNovo(i, id);
         return;
       }
       case "recortar": {
@@ -723,7 +758,8 @@ export class Ferramentas {
     } else if (this.atual === "texto") {
       await this.dialogoTexto(i, pt);
     } else if (this.atual === "carimbo") {
-      await this.c.operar("carimbo", { pagina: i, centro: pt, texto: this.carimboTexto, cor: estilo.cor });
+      const id = await this.c.operar("carimbo", { pagina: i, centro: pt, texto: this.carimboTexto, cor: estilo.cor });
+      await this.selecionarNovo(i, id);
     }
   }
 
@@ -744,8 +780,9 @@ export class Ferramentas {
     if (valor !== "ok") return;
     const t = Number(tamanho.value) || 12;
     // O clique marca o topo do texto; a linha de base fica ~0,8 em abaixo.
-    await this.c.operar("inserirTexto", { pagina, origem: [pt[0], pt[1] + t * 0.8], texto: texto.value,
+    const id = await this.c.operar("inserirTexto", { pagina, origem: [pt[0], pt[1] + t * 0.8], texto: texto.value,
       opcoes: { tamanho: t, cor: estilo.cor, fonte: fonte.value } });
+    await this.selecionarNovo(pagina, id);
   }
 
   private async dialogoEditar(p: PaginaVisor, t: Trecho): Promise<void> {

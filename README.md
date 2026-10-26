@@ -2,7 +2,7 @@
 
 Editor de PDF gratuito e de código aberto para Windows, em português.
 
-![versão](https://img.shields.io/badge/vers%C3%A3o-0.7.1-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
+![versão](https://img.shields.io/badge/vers%C3%A3o-0.8.0-blue) ![licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-green)
 
 ## O que faz
 
@@ -15,6 +15,7 @@ Editor de PDF gratuito e de código aberto para Windows, em português.
 **Texto**
 - **Editar o texto que já está no PDF**: clique numa linha para alterá-la inteira, ou arraste sobre parte dela para alterar só aquele pedaço. O texto novo sai na **fonte original** do PDF e no tamanho exato; só o que mudou é reescrito (o resto da linha fica idêntico). Dá para trocar tamanho, cor e fonte
 - Adicionar texto novo em qualquer ponto da página
+- **Arrastar o que foi inserido**: texto, imagem e assinatura inseridos ficam selecionados e podem ser arrastados (ou excluídos com Delete) — com a própria ferramenta ainda ativa ou com Selecionar. Continuam no conteúdo da página (saem em qualquer leitor); uma tarja ou edição de texto na mesma página os fixa
 - Substituir um texto em todo o documento
 - Localizar com realce dos resultados (Ctrl+F)
 - Extrair todo o texto para `.txt`

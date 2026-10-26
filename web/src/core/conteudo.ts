@@ -17,7 +17,8 @@
 
 import * as mupdf from "mupdf";
 import {
-  matrizPaginaParaConteudo, normalizar, type Matriz, type Ponto, type Retangulo,
+  matrizPaginaParaConteudo, normalizar, paginaParaPdf, pdfParaPagina, deslocamentoPaginaParaPdf,
+  type Matriz, type Ponto, type Retangulo,
 } from "./coordenadas.ts";
 import { fmt, geometria, type Sessao } from "./documento.ts";
 import type { Cor } from "./anotacoes.ts";
@@ -116,8 +117,10 @@ export class Acrescimo {
     return this.recurso("ExtGState", this.doc.addObject({ Type: "ExtGState", ca: v, CA: v }));
   }
 
-  /** `sob`: o trecho vai ANTES do conteudo existente (fica por baixo dele). */
-  gravar(conteudo: string, sob = false): void {
+  /** `sob`: o trecho vai ANTES do conteudo existente (fica por baixo dele).
+   *  Com `item`, o trecho vira um ITEM movel (ver `listarItens`). Devolve o
+   *  numero do objeto do trecho. */
+  gravar(conteudo: string, sob = false, item?: ItemConteudo): number {
     const doc = this.doc;
     const pobj = this.pagina.getObject();
     const res = doc.newDictionary();
@@ -145,7 +148,10 @@ export class Acrescimo {
       }
       lista.push(doc.addStream("\nQ\n", {}));
     }
-    const nosso = doc.addStream("q\n" + conteudo + "\nQ\n", {});
+    const nosso = item
+      ? doc.addStream(`q 1 0 0 1 0 0 cm\n${conteudo}\nQ\n`,
+        { [CHAVE_ITEM]: item.tipo, [CHAVE_CAIXA]: retanguloParaPdf(this.pagina, item.rect) })
+      : doc.addStream("q\n" + conteudo + "\nQ\n", {});
     if (sob) {
       const comNosso = doc.newArray();
       comNosso.push(nosso);
@@ -155,7 +161,119 @@ export class Acrescimo {
       lista.push(nosso);
       pobj.put("Contents", lista);
     }
+    return nosso.asIndirect();
   }
+}
+
+// ------------------------------------------------------------ itens moveis
+
+/*
+ * Texto, imagem e assinatura inseridos vao para o CONTEUDO da pagina (nao sao
+ * anotacao: nao somem com um clique em "excluir anotacao" e saem em qualquer
+ * leitor/impressora). Para poderem ser arrastados depois, cada um fica num
+ * fluxo de conteudo proprio, marcado no dicionario do fluxo:
+ *   /EPFItem /Texto   /EPFCaixa [x0 y0 x1 y1]  (espaco PDF)
+ * e comecando por "q 1 0 0 1 tx ty cm": mover e' so' trocar tx ty.
+ * Uma operacao que reescreve o conteudo da pagina inteira (tarja, editar
+ * texto) junta os fluxos e o item vira conteudo comum, fixo.
+ */
+
+export type TipoItem = "Texto" | "Imagem" | "Assinatura";
+export interface ItemConteudo { tipo: TipoItem; rect: Retangulo }
+
+const CHAVE_ITEM = "EPFItem";
+const CHAVE_CAIXA = "EPFCaixa";
+const PREFIXO = /^q 1 0 0 1 (-?[\d.]+) (-?[\d.]+) cm\n/;
+
+export const NOMES_ITEM: Record<TipoItem, string> = {
+  Texto: "Texto inserido", Imagem: "Imagem", Assinatura: "Assinatura",
+};
+
+function retanguloParaPdf(p: mupdf.PDFPage, r: Retangulo): number[] {
+  const g = geometria(p);
+  const a = paginaParaPdf(g, [r[0], r[1]]), b = paginaParaPdf(g, [r[2], r[3]]);
+  return normalizar([a[0], a[1], b[0], b[1]]);
+}
+
+function retanguloParaPagina(p: mupdf.PDFPage, r: number[]): Retangulo {
+  const g = geometria(p);
+  const a = pdfParaPagina(g, [r[0], r[1]]), b = pdfParaPagina(g, [r[2], r[3]]);
+  return normalizar([a[0], a[1], b[0], b[1]]);
+}
+
+/** Os fluxos de conteudo da pagina, na ordem. */
+function fluxos(p: mupdf.PDFPage): mupdf.PDFObject[] {
+  const c = p.getObject().get("Contents");
+  if (c.isArray()) {
+    const r: mupdf.PDFObject[] = [];
+    for (let i = 0; i < c.length; i++) r.push(c.get(i));
+    return r;
+  }
+  return c.isStream() ? [c] : [];
+}
+
+function ehItem(f: mupdf.PDFObject): boolean {
+  return f.isStream() && f.get(CHAVE_ITEM).isName() && f.get(CHAVE_CAIXA).isArray();
+}
+
+export interface InfoItem { id: number; tipo: TipoItem; nome: string; limites: Retangulo }
+
+/** Itens moveis da pagina (espaco pagina). */
+export function listarItens(p: mupdf.PDFPage): InfoItem[] {
+  const lista: InfoItem[] = [];
+  for (const f of fluxos(p)) {
+    if (!ehItem(f) || !f.isIndirect()) continue;
+    const tipo = f.get(CHAVE_ITEM).asName() as TipoItem;
+    const caixa = f.get(CHAVE_CAIXA);
+    const nums: number[] = [];
+    for (let i = 0; i < caixa.length; i++) nums.push(caixa.get(i).asNumber());
+    lista.push({ id: f.asIndirect(), tipo, nome: NOMES_ITEM[tipo] ?? "Item", limites: retanguloParaPagina(p, nums) });
+  }
+  return lista;
+}
+
+export function ehItemDaPagina(p: mupdf.PDFPage, id: number): boolean {
+  return fluxos(p).some((f) => f.isIndirect() && f.asIndirect() === id && ehItem(f));
+}
+
+function acharItem(p: mupdf.PDFPage, id: number): mupdf.PDFObject {
+  const f = fluxos(p).find((x) => x.isIndirect() && x.asIndirect() === id && ehItem(x));
+  if (!f) throw new Error("Item não encontrado.");
+  return f;
+}
+
+/** Desloca o item em (dx, dy) pontos no espaco pagina. */
+export function moverItem(s: Sessao, pagina: number, id: number, dx: number, dy: number): void {
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+  acharItem(s.pagina(pagina), id);
+  s.operacao("Mover item", () => {
+    const p = s.pagina(pagina);
+    const f = acharItem(p, id);
+    const [px, py] = deslocamentoPaginaParaPdf(geometria(p), dx, dy);
+    const dados = f.readStream().asString();
+    const m = PREFIXO.exec(dados);
+    if (!m) throw new Error("Item não encontrado.");
+    const tx = Number(m[1]) + px, ty = Number(m[2]) + py;
+    f.writeStream(`q 1 0 0 1 ${fmt(tx)} ${fmt(ty)} cm\n` + dados.slice(m[0].length));
+    const caixa = f.get(CHAVE_CAIXA);
+    const nova = s.doc.newArray();
+    for (let i = 0; i < caixa.length; i++) nova.push(caixa.get(i).asNumber() + (i % 2 === 0 ? px : py));
+    f.put(CHAVE_CAIXA, nova);
+  });
+}
+
+/** Tira o item do conteudo da pagina. */
+export function excluirItem(s: Sessao, pagina: number, id: number): void {
+  acharItem(s.pagina(pagina), id);
+  s.operacao("Excluir item", () => {
+    const p = s.pagina(pagina);
+    const pobj = p.getObject();
+    const lista = s.doc.newArray();
+    for (const f of fluxos(p)) {
+      if (!(f.isIndirect() && f.asIndirect() === id)) lista.push(f);
+    }
+    pobj.put("Contents", lista);
+  });
 }
 
 export interface OpcoesTexto {
@@ -186,7 +304,7 @@ function completar(op: OpcoesTexto): Required<OpcoesTexto> {
 
 /** Escreve texto (pode ter varias linhas) sem abrir operacao -- para compor. */
 export function escreverTexto(s: Sessao, p: mupdf.PDFPage, origem: Ponto, texto: string,
-  opcoes: OpcoesTexto = {}, angulo = 0): void {
+  opcoes: OpcoesTexto = {}, angulo = 0, comoItem = false): number {
   const op = completar(opcoes);
   const ac = new Acrescimo(s.doc, p);
   const gs = op.opacidade < 1 ? ac.opacidade(op.opacidade) : undefined;
@@ -197,22 +315,28 @@ export function escreverTexto(s: Sessao, p: mupdf.PDFPage, origem: Ponto, texto:
     const o: Ponto = [origem[0] + d * Math.sin(rad), origem[1] + d * Math.cos(rad)];
     return operadoresLinha(ac, p, o, linha, op, angulo, i === 0 ? gs : undefined);
   });
-  ac.gravar(partes.join("\n"));
+  let item: ItemConteudo | undefined;
+  if (comoItem && angulo === 0) {
+    // Caixa do texto (espaco pagina): do topo das letras ao pe' da ultima linha.
+    const linhas = texto.split(/\r?\n/);
+    const w = Math.max(...linhas.map((l) => larguraTexto(l, op.fonte, op.tamanho)), op.tamanho * 0.5);
+    item = { tipo: "Texto", rect: [origem[0], origem[1] - op.tamanho * 0.85, origem[0] + w,
+      origem[1] + (linhas.length - 1) * op.tamanho * 1.2 + op.tamanho * 0.25] };
+  }
+  return ac.gravar(partes.join("\n"), false, item);
 }
 
 /** Texto novo no conteudo da pagina, linha de base em `origem` (espaco pagina). */
 export function inserirTexto(s: Sessao, pagina: number, origem: Ponto, texto: string,
-  opcoes: OpcoesTexto = {}): void {
+  opcoes: OpcoesTexto = {}): number {
   if (!texto.trim()) throw new Error("Digite o texto.");
-  s.operacao("Adicionar texto", () => {
-    escreverTexto(s, s.pagina(pagina), origem, texto, opcoes);
-  });
+  return s.operacao("Adicionar texto", () => escreverTexto(s, s.pagina(pagina), origem, texto, opcoes, 0, true));
 }
 
 /** Imagem no conteudo da pagina, mantendo a proporcao e centrada em `rect`
  *  (espaco pagina). Sai de pe' para o leitor mesmo em pagina girada. */
 export function inserirImagem(s: Sessao, pagina: number, rect: Retangulo, bytes: Uint8Array,
-  descricao = "Inserir imagem"): void {
+  descricao = "Inserir imagem"): number {
   let img: mupdf.Image;
   try {
     img = new mupdf.Image(bytes);
@@ -225,12 +349,13 @@ export function inserirImagem(s: Sessao, pagina: number, rect: Retangulo, bytes:
   const escala = Math.min(larg / img.getWidth(), alt / img.getHeight());
   const w = img.getWidth() * escala, h = img.getHeight() * escala;
   const x0 = r[0] + (larg - w) / 2, y0 = r[1] + (alt - h) / 2;
-  s.operacao(descricao, () => {
+  return s.operacao(descricao, () => {
     const p = s.pagina(pagina);
     const ac = new Acrescimo(s.doc, p);
     const nome = ac.recurso("XObject", s.doc.addImage(img));
     // Quadrado unitario da imagem (y para cima) -> retangulo no espaco pagina.
     const cm = matrizPaginaParaConteudo(geometria(p), [w, 0, 0, -h, x0, y0 + h]);
-    ac.gravar(`${matrizPdf(cm)} cm\n/${nome} Do`);
+    return ac.gravar(`${matrizPdf(cm)} cm\n/${nome} Do`, false,
+      { tipo: descricao === "Assinatura" ? "Assinatura" : "Imagem", rect: [x0, y0, x0 + w, y0 + h] });
   });
 }

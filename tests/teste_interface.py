@@ -194,6 +194,23 @@ def gestos(pasta) -> None:
     checa("Linha ALTERADA" in texto_da_pagina(d, 0),
           "só a palavra mudou e a linha continua inteira")
 
+    # Texto inserido fica selecionado e e' arrastado com a propria ferramenta.
+    from editpdfree import itens
+    modulo_aba.pedir_texto = lambda *a, **k: "Arraste-me"
+    j.definir_ferramenta(Ferramenta.ADICIONAR_TEXTO)
+    clicar(v, cena_de_pdf(v, 0, 300, 300))
+    lista = itens.listar(d.doc[0])
+    checa_igual(len(lista), 1, "texto inserido vira item")
+    xref, _t, caixa = lista[0]
+    checa_igual(v.selecionada, (0, xref), "texto recem-inserido fica selecionado")
+    meio = ((caixa.x0 + caixa.x1) / 2, (caixa.y0 + caixa.y1) / 2)
+    arrastar(v, cena_de_pdf(v, 0, *meio),
+             cena_de_pdf(v, 0, meio[0] + 60, meio[1] + 40))
+    nova = itens.caixa_do_item(d.doc[0], xref)
+    checa(abs(nova.x0 - caixa.x0 - 60) < 3 and abs(nova.y0 - caixa.y0 - 40) < 3,
+          f"arrastado com a ferramenta de texto ativa ({caixa} -> {nova})")
+    checa_igual(len(itens.listar(d.doc[0])), 1, "arrastar nao inseriu outro")
+
     # Assinatura: o primeiro clique pede o desenho; o segundo reaproveita.
     img = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 20), False)
     img.clear_with(0)
