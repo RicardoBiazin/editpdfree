@@ -381,7 +381,11 @@ export class Ferramentas {
       this.excluirSelecionada();
     });
     const rotulo = el("span", { classe: "selecao-rotulo", textContent: a.nome });
-    caixa.append(rotulo, bt);
+    // Rotulo e botao lado a lado numa barra propria: presos as bordas da
+    // caixa, se sobrepunham quando o item era estreito. Perto do topo da
+    // pagina a barra vai para baixo da caixa.
+    const barra = el("div", { classe: "selecao-barra" + (a.limites[1] < 30 ? " abaixo" : "") }, rotulo, bt);
+    caixa.append(barra);
     // Arrastar a caixa move a anotacao (no toque, a caixa tem touch-action:none).
     caixa.addEventListener("pointerdown", (ev) => {
       if (!a.movel) return;

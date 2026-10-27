@@ -553,11 +553,13 @@ try {
   await avaliar(`document.querySelector('[data-ferramenta="texto"]').click(), true`);
   await clicar(q1[0] + 40 * q1[2], q1[1] + 250 * q1[2]);
   ok(await aguardar(`!!document.querySelector("dialog[open] textarea")`), "adicionar texto: diálogo abriu");
-  await noDialogo(`d.querySelector("textarea").value = "Texto arrastável"`);
+  await noDialogo(`d.querySelector("textarea").value = "abc"`);
   await confirmarDialogo();
   ok(await desfazerDiz("Adicionar texto"), "texto adicionado");
   ok(await aguardar(`document.querySelector(".selecao-anot .selecao-rotulo")?.textContent === "Texto inserido"`),
     "texto recém-inserido fica selecionado");
+  ok(await avaliar(`(() => { const r = document.querySelector(".selecao-rotulo").getBoundingClientRect(), b = document.querySelector(".selecao-excluir").getBoundingClientRect(); return r.right <= b.left; })()`),
+    "rótulo e Excluir lado a lado, sem sobrepor");
   const bx = await avaliar(`(() => { const b = document.querySelector(".selecao-anot").getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`);
   await arrastar(bx[0], bx[1], bx[0] + 60 * q1[2], bx[1] + 40 * q1[2]);
   ok(await desfazerDiz("Mover item"), "texto inserido arrastado (com a ferramenta de texto ainda ativa)");
