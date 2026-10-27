@@ -408,7 +408,8 @@ class DialogoEditarTexto(QDialog):
 
     def __init__(self, texto: str, tamanho: float, cor, fonte: str,
                  parent=None, titulo: str = "Editar texto", linha: str = "",
-                 fontes: list[tuple[str, str]] | None = None):
+                 fontes: list[tuple[str, str]] | None = None,
+                 dica: str | None = None, rotulo_ok: str = "Substituir"):
         super().__init__(parent)
         self.setWindowTitle(titulo)
         self.resize(560, 0)
@@ -432,14 +433,14 @@ class DialogoEditarTexto(QDialog):
         form.addRow("Tamanho:", self.tamanho)
         form.addRow("Cor:", self.cor)
         form.addRow("Fonte:", self.fonte)
-        dica = QLabel("Só o que você mudar é reescrito, na fonte original do "
-                      "PDF. Letra que a fonte embutida não tem (ela costuma "
-                      "vir só com as letras usadas no documento) sai na fonte "
-                      "padrão mais parecida. Para editar só uma parte, "
-                      "arraste sobre ela na página.")
+        dica = QLabel(dica or (
+            "Só o que você mudar é reescrito, na fonte original do PDF. "
+            "Letra que a fonte embutida não tem (ela costuma vir só com as "
+            "letras usadas no documento) sai na fonte padrão mais parecida. "
+            "Para editar só uma parte, arraste sobre ela na página."))
         dica.setWordWrap(True)
         form.addRow(dica)
-        form.addRow(_botoes(self, "Substituir"))
+        form.addRow(_botoes(self, rotulo_ok))
 
 
 # -- assinatura -----------------------------------------------------------------

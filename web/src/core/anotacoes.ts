@@ -77,7 +77,7 @@ export function listarAnotacoes(p: mupdf.PDFPage): InfoAnotacao[] {
   // Texto/imagem/assinatura inseridos no conteudo: selecionaveis e moveis
   // como as anotacoes (o id e' o numero do objeto do fluxo).
   for (const it of listarItens(p)) {
-    lista.push({ id: it.id, tipo: "Item" + it.tipo, nome: it.nome, limites: it.limites, movel: true, texto: "" });
+    lista.push({ id: it.id, tipo: "Item" + it.tipo, nome: it.nome, limites: it.limites, movel: true, texto: it.texto });
   }
   return lista;
 }

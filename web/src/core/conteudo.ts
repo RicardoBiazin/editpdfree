@@ -174,6 +174,9 @@ export class Acrescimo {
  * fluxo de conteudo proprio, marcado no dicionario do fluxo:
  *   /EPFItem /Texto   /EPFCaixa [x0 y0 x1 y1]  (espaco PDF)
  * e comecando por "q 1 0 0 1 tx ty cm": mover e' so' trocar tx ty.
+ * O texto guarda tambem o que foi digitado e o estilo (/EPFTexto, /EPFTam,
+ * /EPFCor, /EPFFonte e /EPFOrigem, a linha de base no espaco PDF antes do
+ * deslocamento) para poder ser editado depois.
  * Uma operacao que reescreve o conteudo da pagina inteira (tarja, editar
  * texto) junta os fluxos e o item vira conteudo comum, fixo.
  */
@@ -216,7 +219,10 @@ function ehItem(f: mupdf.PDFObject): boolean {
   return f.isStream() && f.get(CHAVE_ITEM).isName() && f.get(CHAVE_CAIXA).isArray();
 }
 
-export interface InfoItem { id: number; tipo: TipoItem; nome: string; limites: Retangulo }
+export interface InfoItem { id: number; tipo: TipoItem; nome: string; limites: Retangulo; texto: string }
+
+/** O que foi digitado num item de texto (para editar depois). */
+export interface DadosItemTexto { texto: string; tamanho: number; cor: Cor; fonte: string }
 
 /** Itens moveis da pagina (espaco pagina). */
 export function listarItens(p: mupdf.PDFPage): InfoItem[] {
@@ -227,7 +233,9 @@ export function listarItens(p: mupdf.PDFPage): InfoItem[] {
     const caixa = f.get(CHAVE_CAIXA);
     const nums: number[] = [];
     for (let i = 0; i < caixa.length; i++) nums.push(caixa.get(i).asNumber());
-    lista.push({ id: f.asIndirect(), tipo, nome: NOMES_ITEM[tipo] ?? "Item", limites: retanguloParaPagina(p, nums) });
+    const txt = f.get("EPFTexto");
+    lista.push({ id: f.asIndirect(), tipo, nome: NOMES_ITEM[tipo] ?? "Item", limites: retanguloParaPagina(p, nums),
+      texto: txt.isString() ? txt.asString() : "" });
   }
   return lista;
 }
@@ -259,6 +267,39 @@ export function moverItem(s: Sessao, pagina: number, id: number, dx: number, dy:
     const nova = s.doc.newArray();
     for (let i = 0; i < caixa.length; i++) nova.push(caixa.get(i).asNumber() + (i % 2 === 0 ? px : py));
     f.put(CHAVE_CAIXA, nova);
+  });
+}
+
+/** Texto e estilo de um item de texto (null: nao e' texto editavel). */
+export function dadosItemTexto(p: mupdf.PDFPage, id: number): DadosItemTexto | null {
+  const f = acharItem(p, id);
+  const t = f.get("EPFTexto"), cor = f.get("EPFCor");
+  if (!t.isString() || !f.get("EPFOrigem").isArray()) return null;
+  const c: Cor = cor.isArray() && cor.length === 3 ? [cor.get(0).asNumber(), cor.get(1).asNumber(), cor.get(2).asNumber()] : [0, 0, 0];
+  return { texto: t.asString(), tamanho: f.get("EPFTam").isNumber() ? f.get("EPFTam").asNumber() : 12, cor: c,
+    fonte: f.get("EPFFonte").isName() ? f.get("EPFFonte").asName() : "Helvetica" };
+}
+
+/** Troca o texto (e o estilo) de um item de texto, no lugar onde ele esta'
+ *  agora. O item e' reescrito: sai do conteudo e volta com o texto novo (o id
+ *  muda -- e' devolvido). */
+export function editarItemTexto(s: Sessao, pagina: number, id: number, texto: string,
+  opcoes: OpcoesTexto = {}): number {
+  if (!texto.trim()) throw new Error("Digite o texto.");
+  const atual = dadosItemTexto(s.pagina(pagina), id);
+  if (!atual) throw new Error("Este item não é um texto editável.");
+  return s.operacao("Editar texto inserido", () => {
+    const p = s.pagina(pagina);
+    const f = acharItem(p, id);
+    const o = f.get("EPFOrigem");
+    const m = PREFIXO.exec(f.readStream().asString());
+    const tx = m ? Number(m[1]) : 0, ty = m ? Number(m[2]) : 0;
+    const origem = pdfParaPagina(geometria(p), [o.get(0).asNumber() + tx, o.get(1).asNumber() + ty]);
+    const lista = s.doc.newArray();
+    for (const x of fluxos(p)) if (!(x.isIndirect() && x.asIndirect() === id)) lista.push(x);
+    p.getObject().put("Contents", lista);
+    return escreverTexto(s, s.pagina(pagina), origem, texto,
+      { tamanho: atual.tamanho, cor: atual.cor, fonte: atual.fonte, ...opcoes }, 0, true);
   });
 }
 
@@ -323,7 +364,18 @@ export function escreverTexto(s: Sessao, p: mupdf.PDFPage, origem: Ponto, texto:
     item = { tipo: "Texto", rect: [origem[0], origem[1] - op.tamanho * 0.85, origem[0] + w,
       origem[1] + (linhas.length - 1) * op.tamanho * 1.2 + op.tamanho * 0.25] };
   }
-  return ac.gravar(partes.join("\n"), false, item);
+  const id = ac.gravar(partes.join("\n"), false, item);
+  if (item) {
+    // Para editar depois: o texto, o estilo e a linha de base (espaco PDF).
+    const f = s.doc.newIndirect(id);
+    const o = paginaParaPdf(geometria(p), origem);
+    f.put("EPFTexto", s.doc.newString(texto));
+    f.put("EPFTam", op.tamanho);
+    f.put("EPFCor", op.cor);
+    f.put("EPFFonte", s.doc.newName(op.fonte));
+    f.put("EPFOrigem", o);
+  }
+  return id;
 }
 
 /** Texto novo no conteudo da pagina, linha de base em `origem` (espaco pagina). */

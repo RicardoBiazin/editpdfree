@@ -85,9 +85,38 @@ def imagem_e_exclusao() -> None:
                 "so' o texto continua item")
 
 
+def editar_inserido(rotacao: int) -> None:
+    secao(f"editar o texto inserido (pagina a {rotacao} graus)")
+    d = Documento(dados=pdf_texto([["fixo"]], rotacoes=[rotacao]))
+    xref = texto.inserir_texto(d, 0, pymupdf.Point(100, 200), "adadasda",
+                               tamanho=14, cor=(1, 0, 0), fonte="tiro")
+    checa_igual(itens.dados_texto(d.doc[0], xref),
+                {"texto": "adadasda", "tamanho": 14.0, "cor": (1.0, 0.0, 0.0),
+                 "fonte": "tiro"}, "o item guarda texto e estilo")
+    anotacoes.mover_anotacao(d, 0, xref, 40, 10)
+    antes = _origem(d, 0, "adadasda")
+    novo = itens.editar_texto(d, 0, xref, "Ricardo Crocetta Biazin")
+    checa("adadasda" not in texto_da_pagina(d, 0), "o texto antigo saiu")
+    depois = _origem(d, 0, "Ricardo")
+    checa(_perto(depois.x, antes.x) and _perto(depois.y, antes.y),
+          f"no lugar do arrasto: {antes} -> {depois}")
+    dados = itens.dados_texto(d.doc[0], novo)
+    checa(dados["texto"] == "Ricardo Crocetta Biazin" and dados["fonte"] == "tiro"
+          and dados["tamanho"] == 14.0, "continua editavel, mesmo estilo")
+    itens.editar_texto(d, 0, novo, "Ricardo", tamanho=20)
+    span = [s for b in d.doc[0].get_text("dict")["blocks"]
+            for l in b.get("lines", []) for s in l["spans"]
+            if "Ricardo" in s["text"]][0]
+    checa(_perto(span["size"], 20, 0.1), "tamanho novo")
+    d.desfazer()
+    d.desfazer()
+    checa("adadasda" in texto_da_pagina(d, 0), "desfazer volta")
+
+
 def main() -> int:
     for r in (0, 90):
         texto_inserido(r)
+        editar_inserido(r)
     imagem_e_exclusao()
     return resumir()
 

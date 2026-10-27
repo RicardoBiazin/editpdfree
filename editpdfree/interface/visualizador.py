@@ -76,6 +76,8 @@ class Visualizador(QGraphicsView):
     anotacaoArrastada = Signal(int, int, float, float)
     #: (pagina, xref)
     anotacaoExcluir = Signal(int, int)
+    #: Duplo clique (ou menu) num texto inserido: (pagina, xref do item).
+    itemTextoEditar = Signal(int, int)
     #: (pagina, pymupdf.Rect, QPoint global) -- selecao de texto com o mouse
     selecaoFeita = Signal(int, object, object)
     #: (pagina, pymupdf.Point) -- clique num campo de formulario
@@ -449,6 +451,31 @@ class Visualizador(QGraphicsView):
         self._arrasto = {"tipo": g.value, "pagina": pagina, "item": item,
                          "inicio": cena}
 
+    def _texto_inserido_em(self, pagina: int, ponto) -> int | None:
+        """xref do texto inserido (editavel) sob o ponto."""
+        from .. import itens
+        p = self.documento.doc[pagina]
+        xref = itens.item_em(p, ponto, folga=3 / self.zoom)
+        if xref is not None and itens.dados_texto(p, xref) is not None:
+            return xref
+        return None
+
+    def mouseDoubleClickEvent(self, evento) -> None:      # noqa: N802
+        if (self.documento is not None
+                and evento.button() == Qt.MouseButton.LeftButton
+                and (self.ferramenta is Ferramenta.SELECIONAR
+                     or self.ferramenta in _INSERIR)):
+            cena = self.mapToScene(evento.position().toPoint())
+            pagina = self.pagina_em(cena)
+            if pagina is not None:
+                xref = self._texto_inserido_em(
+                    pagina, self.cena_para_pdf(pagina, cena))
+                if xref is not None:
+                    self._arrasto = None
+                    self.itemTextoEditar.emit(pagina, xref)
+                    return
+        super().mouseDoubleClickEvent(evento)
+
     def _pegar_inserido(self, pagina: int, cena: QPointF,
                         ponto_pdf: pymupdf.Point) -> bool:
         """Com uma ferramenta de inserir, apertar sobre algo ja' inserido o
@@ -608,9 +635,14 @@ class Visualizador(QGraphicsView):
             return
         self.selecionar_anotacao(pagina, xref)
         menu = QMenu(self)
+        editar = (menu.addAction("Editar texto…")
+                  if self._texto_inserido_em(pagina, ponto) == xref else None)
         excluir = menu.addAction("Excluir")
-        if menu.exec(evento.globalPosition().toPoint()) is excluir:
+        escolhida = menu.exec(evento.globalPosition().toPoint())
+        if escolhida is excluir:
             self.anotacaoExcluir.emit(pagina, xref)
+        elif editar is not None and escolhida is editar:
+            self.itemTextoEditar.emit(pagina, xref)
 
     def keyPressEvent(self, evento) -> None:              # noqa: N802
         if evento.key() == Qt.Key.Key_Escape:

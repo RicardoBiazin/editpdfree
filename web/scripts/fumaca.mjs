@@ -564,6 +564,16 @@ try {
   await arrastar(bx[0], bx[1], bx[0] + 60 * q1[2], bx[1] + 40 * q1[2]);
   ok(await desfazerDiz("Mover item"), "texto inserido arrastado (com a ferramenta de texto ainda ativa)");
   await captura("fumaca-9b-texto-arrastado.png");
+  ok(await aguardar(`!!document.querySelector(".selecao-editar")`), "texto inserido tem o botão Editar");
+  await avaliar(`document.querySelector(".selecao-editar").click(), true`);
+  ok(await aguardar(`document.querySelector("dialog[open] textarea")?.value === "abc"`), "editar inserido: diálogo traz o texto");
+  await noDialogo(`d.querySelector("textarea").value = "abc editado"`);
+  await confirmarDialogo();
+  ok(await desfazerDiz("Editar texto inserido"), "texto inserido editado");
+  ok(await aguardar(`!!document.querySelector(".selecao-editar")`), "continua selecionado depois de editar");
+  ok(await avaliar(`(() => { const b = [...document.querySelectorAll(".selecao-barra > *")].map((e) => e.getBoundingClientRect()); return b.every((r, i) => i === 0 || b[i - 1].right <= r.left); })()`),
+    "rótulo, Editar e Excluir sem sobrepor");
+  await captura("fumaca-9c-texto-editado.png");
   await avaliar(`document.querySelector('[data-ferramenta="selecionar"]').click(), true`);
 
   // ---- propriedades e substituir

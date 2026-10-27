@@ -466,22 +466,8 @@ def inserir_texto(d: Documento, pagina: int, ponto: pymupdf.Point, texto: str,
     (ver `itens`); devolve o xref dele."""
     from . import itens
     with d.operacao("Adicionar texto"):
-        p = d.doc[pagina]
-        antes = p.get_contents()
-        p.insert_text(ponto, texto, fontsize=tamanho, fontname=fonte,
-                      color=cor, rotate=p.rotation)
-        # Caixa no espaco que o leitor ve (o texto corre para a direita dele)
-        # e depois de volta ao espaco sem rotacao.
-        linhas = texto.split("\n")
-        largura = max(max(pymupdf.get_text_length(lin, fontname=fonte,
-                                                  fontsize=tamanho)
-                          for lin in linhas), tamanho * 0.5)
-        o = pymupdf.Point(ponto) * p.rotation_matrix
-        caixa = pymupdf.Rect(o.x, o.y - tamanho * 0.85, o.x + largura,
-                             o.y + (len(linhas) - 1) * tamanho * 1.2
-                             + tamanho * 0.25) * p.derotation_matrix
-        caixa.normalize()
-        return itens.registrar(p, antes, "Texto", caixa)
+        return itens.escrever_texto(d.doc[pagina], ponto, texto, tamanho, cor,
+                                    fonte)
 
 
 def extrair_texto(d: Documento) -> str:

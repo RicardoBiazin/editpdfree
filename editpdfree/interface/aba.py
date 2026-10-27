@@ -68,6 +68,27 @@ def fontes_para_edicao(trecho: texto.Trecho) -> list[tuple[str, str]]:
     return opcoes
 
 
+_FONTES_INSERIDO = [("helv", "Helvetica"), ("hebo", "Helvetica negrito"),
+                    ("tiro", "Times"), ("tibo", "Times negrito"),
+                    ("cour", "Courier"), ("cobo", "Courier negrito")]
+
+
+def pedir_edicao_inserido(parent, dados: dict):
+    """Texto inserido: devolve (texto, tamanho, cor, fonte) ou None."""
+    fontes = list(_FONTES_INSERIDO)
+    if not any(v == dados["fonte"] for v, _r in fontes):
+        fontes.append((dados["fonte"], dados["fonte"]))
+    fontes.sort(key=lambda f: f[0] != dados["fonte"])     # a atual primeiro
+    d = dialogos.DialogoEditarTexto(
+        dados["texto"], dados["tamanho"], dados["cor"], "", parent,
+        titulo="Editar texto inserido", fontes=fontes, rotulo_ok="Salvar",
+        dica="O texto é reescrito no lugar onde está agora.")
+    if d.exec() != d.DialogCode.Accepted:
+        return None
+    return (d.texto.text(), d.tamanho.value(), tuple(d.cor.cor),
+            d.fonte.currentData())
+
+
 def pedir_edicao(parent, trecho: texto.Trecho):
     """Devolve (texto, tamanho, cor, fonte) ou None. Tamanho, cor e fonte
     vem None quando nao mudaram: o resto da linha fica identico."""
@@ -234,6 +255,7 @@ class AbaDocumento(QWidget):
         v.tracoFeito.connect(self._traco)
         v.anotacaoArrastada.connect(self._mover_anotacao)
         v.anotacaoExcluir.connect(self._excluir_anotacao)
+        v.itemTextoEditar.connect(self._editar_inserido)
         v.selecaoFeita.connect(self._selecao)
         v.campoClicado.connect(self._campo)
         v.linkAcionado.connect(self._link)
@@ -394,6 +416,20 @@ class AbaDocumento(QWidget):
         self._selecionar_novo(pagina, self._executar(
             anotacoes.imagem, self.documento, pagina, r, dados=dados,
             descricao="Assinar"))
+
+    def _editar_inserido(self, pagina: int, xref: int) -> None:
+        """Editar o texto de um texto ja' inserido, no lugar onde ele esta'."""
+        from .. import itens
+        dados = itens.dados_texto(self.documento.doc[pagina], xref)
+        if dados is None:
+            return
+        resposta = pedir_edicao_inserido(self, dados)
+        if resposta is None:
+            return
+        novo, tamanho, cor, fonte = resposta
+        self._selecionar_novo(pagina, self._executar(
+            itens.editar_texto, self.documento, pagina, xref, novo,
+            tamanho=tamanho, cor=cor, fonte=fonte))
 
     def _selecionar_novo(self, pagina: int, xref) -> None:
         """Recem-inserido fica selecionado, pronto para arrastar."""

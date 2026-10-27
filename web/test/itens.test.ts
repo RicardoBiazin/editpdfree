@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderizar } from "../src/core/render.ts";
 import { excluirAnotacao, listarAnotacoes, moverAnotacao } from "../src/core/anotacoes.ts";
-import { inserirImagem, inserirTexto } from "../src/core/conteudo.ts";
+import { dadosItemTexto, editarItemTexto, inserirImagem, inserirTexto } from "../src/core/conteudo.ts";
 import { trechoEm } from "../src/core/texto.ts";
 import { pngTeste, reabrir, sessao, textoDaPagina } from "./fixtures.ts";
 
@@ -75,3 +75,32 @@ test("excluir o item tira só ele; desfazer devolve", () => {
   t = textoDaPagina(reabrir(s), 0);
   assert.match(t, /Primeiro/);
 });
+
+for (const rot of [0, 90] as const) {
+  test(`página ${rot}°: editar o texto inserido, no lugar para onde foi arrastado`, () => {
+    const s = sessao([{ rotacao: rot, linhas: ["fixo"] }]);
+    const id = inserirTexto(s, 0, [100, 200], "adadasda", { tamanho: 14, cor: [1, 0, 0], fonte: "Times-Roman" });
+    assert.deepEqual(dadosItemTexto(s.pagina(0), id), { texto: "adadasda", tamanho: 14, cor: [1, 0, 0], fonte: "Times-Roman" });
+    assert.equal(listarAnotacoes(s.pagina(0)).find((a) => a.id === id)!.texto, "adadasda");
+    moverAnotacao(s, 0, id, 40, 10);
+    const novo = editarItemTexto(s, 0, id, "Ricardo Crocetta Biazin");
+    const s2 = reabrir(s);
+    const t = textoDaPagina(s2, 0);
+    assert.doesNotMatch(t, /adadasda/, "o texto antigo saiu");
+    const tr = trechoEm(s2.pagina(0), 0, [150, 206])!;
+    assert.equal(tr.texto, "Ricardo Crocetta Biazin");
+    perto(tr.origem[0], 140, 0.5, "mesmo x (o do arrasto)");
+    perto(tr.origem[1], 210, 0.5, "mesmo y (o do arrasto)");
+    perto(tr.tamanho, 14, 0.1, "mesmo tamanho");
+    assert.match(tr.fonte, /Times|Nimbus/i, "mesma fonte");
+    const it = listarAnotacoes(s.pagina(0)).find((a) => a.id === novo)!;
+    assert.equal(it.texto, "Ricardo Crocetta Biazin", "continua item editável");
+    // Trocar o tamanho tambem.
+    editarItemTexto(s, 0, novo, "Ricardo", { tamanho: 20 });
+    const t3 = trechoEm(reabrir(s).pagina(0), 0, [150, 204])!;
+    perto(t3.tamanho, 20, 0.1, "tamanho novo");
+    s.desfazer();
+    s.desfazer();
+    assert.match(textoDaPagina(reabrir(s), 0), /adadasda/, "desfazer volta");
+  });
+}

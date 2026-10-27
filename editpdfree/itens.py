@@ -7,7 +7,10 @@ conteudo proprio, marcado no dicionario do fluxo:
 
     /EPFItem /Texto   /EPFCaixa [x0 y0 x1 y1]   (espaco do ARQUIVO, y para cima)
 
-e comecando por ``q 1 0 0 1 tx ty cm``: mover e' so' trocar tx ty. E' o mesmo
+e comecando por ``q 1 0 0 1 tx ty cm``: mover e' so' trocar tx ty. O texto
+guarda tambem o que foi digitado e o estilo (/EPFTexto, /EPFTam, /EPFCor,
+/EPFFonte com o nome Base-14 do PDF, /EPFOrigem com a linha de base no espaco
+do arquivo antes do deslocamento) para ser editado depois. E' o mesmo
 formato da versao web -- um PDF salvo numa e' movido na outra.
 
 Uma operacao que reescreve o conteudo da pagina inteira (tarja, editar texto)
@@ -81,6 +84,97 @@ def registrar(p: pymupdf.Page, antes: list[int], tipo: str,
     doc.xref_set_key(alvo, "EPFCaixa",
                      "[%s]" % " ".join(_num(v) for v in (r.x0, r.y0, r.x1, r.y1)))
     return alvo
+
+
+#: Codigo de fonte do PyMuPDF <-> nome Base-14 no PDF (a web grava o nome).
+_FONTES = {"helv": "Helvetica", "hebo": "Helvetica-Bold",
+           "heit": "Helvetica-Oblique", "hebi": "Helvetica-BoldOblique",
+           "tiro": "Times-Roman", "tibo": "Times-Bold", "tiit": "Times-Italic",
+           "tibi": "Times-BoldItalic", "cour": "Courier", "cobo": "Courier-Bold",
+           "coit": "Courier-Oblique", "cobi": "Courier-BoldOblique"}
+_CODIGOS = {v: k for k, v in _FONTES.items()}
+
+
+def escrever_texto(p: pymupdf.Page, ponto: pymupdf.Point, texto: str,
+                   tamanho: float, cor, fonte: str = "helv") -> int | None:
+    """Escreve o texto (linha de base em `ponto`, espaco PDF do PyMuPDF) como
+    item movel e editavel. Nao abre operacao: quem chama abre."""
+    antes = p.get_contents()
+    p.insert_text(ponto, texto, fontsize=tamanho, fontname=fonte, color=cor,
+                  rotate=p.rotation)
+    # Caixa no espaco que o leitor ve (o texto corre para a direita dele) e
+    # depois de volta ao espaco sem rotacao.
+    linhas = texto.split("\n")
+    largura = max(max(pymupdf.get_text_length(lin, fontname=fonte,
+                                              fontsize=tamanho)
+                      for lin in linhas), tamanho * 0.5)
+    o = pymupdf.Point(ponto) * p.rotation_matrix
+    caixa = pymupdf.Rect(o.x, o.y - tamanho * 0.85, o.x + largura,
+                         o.y + (len(linhas) - 1) * tamanho * 1.2
+                         + tamanho * 0.25) * p.derotation_matrix
+    caixa.normalize()
+    xref = registrar(p, antes, "Texto", caixa)
+    if xref is not None:
+        doc = p.parent
+        origem = pymupdf.Point(ponto) * _para_arquivo(p)
+        doc.xref_set_key(xref, "EPFTexto", pymupdf.get_pdf_str(texto))
+        doc.xref_set_key(xref, "EPFTam", _num(tamanho))
+        doc.xref_set_key(xref, "EPFCor", "[%s]" % " ".join(_num(c) for c in cor))
+        doc.xref_set_key(xref, "EPFFonte", "/" + _FONTES.get(fonte, "Helvetica"))
+        doc.xref_set_key(xref, "EPFOrigem", f"[{_num(origem.x)} {_num(origem.y)}]")
+    return xref
+
+
+def dados_texto(p: pymupdf.Page, xref: int) -> dict | None:
+    """{texto, tamanho, cor, fonte (codigo do PyMuPDF)} de um item de texto;
+    None se o item nao guarda o texto."""
+    doc = p.parent
+    tipo, texto = doc.xref_get_key(xref, "EPFTexto")
+    if tipo != "string" or doc.xref_get_key(xref, "EPFOrigem")[0] != "array":
+        return None
+    try:
+        tamanho = float(doc.xref_get_key(xref, "EPFTam")[1])
+    except ValueError:
+        tamanho = 12.0
+    try:
+        cor = tuple(float(v) for v in
+                    doc.xref_get_key(xref, "EPFCor")[1].strip("[]").split())
+    except ValueError:
+        cor = (0.0, 0.0, 0.0)
+    nome = doc.xref_get_key(xref, "EPFFonte")[1].lstrip("/")
+    return {"texto": texto, "tamanho": tamanho,
+            "cor": cor if len(cor) == 3 else (0.0, 0.0, 0.0),
+            "fonte": _CODIGOS.get(nome, "helv")}
+
+
+def editar_texto(d: Documento, pagina: int, xref: int, texto: str, *,
+                 tamanho: float | None = None, cor=None,
+                 fonte: str | None = None) -> int | None:
+    """Troca o texto de um item de texto, no lugar onde ele esta' agora. O
+    item e' reescrito (sai e volta com o texto novo): o xref muda e e'
+    devolvido."""
+    if not texto.strip():
+        raise ValueError("Digite o texto.")
+    p0 = d.doc[pagina]
+    atual = dados_texto(p0, xref) if eh_item(p0, xref) else None
+    if atual is None:
+        raise ValueError("Este item não é um texto editável.")
+    with d.operacao("Editar texto inserido"):
+        p = d.doc[pagina]
+        doc = d.doc
+        o = [float(v) for v in
+             doc.xref_get_key(xref, "EPFOrigem")[1].strip("[]").split()]
+        achado = _PREFIXO.match(doc.xref_stream(xref))
+        tx, ty = ((float(achado.group(1)), float(achado.group(2)))
+                  if achado else (0.0, 0.0))
+        ponto = pymupdf.Point(o[0] + tx, o[1] + ty) * ~_para_arquivo(p)
+        resto = [x for x in p.get_contents() if x != xref]
+        doc.xref_set_key(p.xref, "Contents",
+                         "[%s]" % " ".join(f"{x} 0 R" for x in resto))
+        return escrever_texto(p, ponto, texto,
+                              tamanho if tamanho is not None else atual["tamanho"],
+                              tuple(cor) if cor is not None else atual["cor"],
+                              fonte or atual["fonte"])
 
 
 def listar(p: pymupdf.Page) -> list[tuple[int, str, pymupdf.Rect]]:

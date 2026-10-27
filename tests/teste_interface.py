@@ -210,6 +210,24 @@ def gestos(pasta) -> None:
     checa(abs(nova.x0 - caixa.x0 - 60) < 3 and abs(nova.y0 - caixa.y0 - 40) < 3,
           f"arrastado com a ferramenta de texto ativa ({caixa} -> {nova})")
     checa_igual(len(itens.listar(d.doc[0])), 1, "arrastar nao inseriu outro")
+    # Duplo clique no texto inserido edita o texto, no lugar do arrasto.
+    vistos = []
+    modulo_aba.pedir_edicao_inserido = lambda _p, dados: (
+        vistos.append(dados["texto"]) or ("Editado", 12, (0, 0, 1), "tiro"))
+    meio = ((nova.x0 + nova.x1) / 2, (nova.y0 + nova.y1) / 2)
+    clicar(v, cena_de_pdf(v, 0, *meio))
+    _evento(QEvent.Type.MouseButtonDblClick, v, cena_de_pdf(v, 0, *meio),
+            Qt.MouseButton.LeftButton)
+    _evento(QEvent.Type.MouseButtonRelease, v, cena_de_pdf(v, 0, *meio),
+            Qt.MouseButton.NoButton)
+    drenar_eventos()
+    checa_igual(vistos, ["Arraste-me"], "duplo clique abre a edicao com o texto")
+    lista = itens.listar(d.doc[0])
+    checa("Editado" in texto_da_pagina(d, 0)
+          and "Arraste-me" not in texto_da_pagina(d, 0), "texto inserido editado")
+    checa(len(lista) == 1 and abs(lista[0][2].x0 - nova.x0) < 1,
+          "editado no lugar do arrasto")
+    checa_igual(v.selecionada, (0, lista[0][0]), "o editado fica selecionado")
 
     # Assinatura: o primeiro clique pede o desenho; o segundo reaproveita.
     img = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 20), False)

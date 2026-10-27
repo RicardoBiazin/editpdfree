@@ -132,6 +132,7 @@ const operacoes: Record<string, (a: Args) => unknown> = {
   moverAnotacao: (a) => anot.moverAnotacao(sessao(), a.pagina, a.id, a.dx, a.dy),
   inserirImagem: (a) => conteudo.inserirImagem(sessao(), a.pagina, a.rect, new Uint8Array(a.bytes), a.descricao),
   inserirTexto: (a) => conteudo.inserirTexto(sessao(), a.pagina, a.origem, a.texto, a.opcoes),
+  editarItemTexto: (a) => conteudo.editarItemTexto(sessao(), a.pagina, a.id, a.texto, a.opcoes),
   tarjar: (a) => seg.tarjar(sessao(), a.areas),
   tarjarTexto: (a) => seg.tarjarTexto(sessao(), a.termo),
   preencherCampo: (a) => form.preencherCampo(sessao(), a.pagina, a.id, a.valor),
@@ -185,6 +186,8 @@ function executar(tipo: string, a: Args): Resposta {
       return [anot.listarAnotacoes(pagina(a.pagina))];
     case "campos":
       return [form.listarCampos(pagina(a.pagina), a.pagina)];
+    case "dadosItemTexto":
+      return [conteudo.dadosItemTexto(pagina(a.pagina), a.id)];
     case "trechoEm":
       return [texto.trechoEm(pagina(a.pagina), a.pagina, a.ponto)];
     case "buscar":

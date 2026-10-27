@@ -11,12 +11,13 @@
 
 import type { Motor } from "../rpc.ts";
 import type { Visor, PaginaVisor } from "./visor.ts";
-import type { InfoAnotacao, Estilo, TipoForma } from "../core/anotacoes.ts";
+import type { Cor, InfoAnotacao, Estilo, TipoForma } from "../core/anotacoes.ts";
 import type { Campo } from "../core/formularios.ts";
 import {
   caixaSelecao, nomeBase14, selecionarFaixa, textoSelecionado, type Trecho,
 } from "../core/trecho.ts";
 import type { ResultadoEdicao } from "../core/texto.ts";
+import type { DadosItemTexto } from "../core/conteudo.ts";
 import type { Resultado } from "../core/seguranca.ts";
 import { normalizar, type Ponto, type Retangulo } from "../core/coordenadas.ts";
 import { avisar, campo, confirmar, dialogo, el, pedirTexto } from "./dialogos.ts";
@@ -381,10 +382,24 @@ export class Ferramentas {
       this.excluirSelecionada();
     });
     const rotulo = el("span", { classe: "selecao-rotulo", textContent: a.nome });
+    const extras: HTMLElement[] = [];
+    if (a.tipo === "ItemTexto") {
+      const ed = el("button", { classe: "selecao-editar", type: "button", textContent: "Editar", title: "Editar o texto (duplo clique)" });
+      ed.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      ed.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        void this.editarInserido(p, a);
+      });
+      extras.push(ed);
+      caixa.addEventListener("dblclick", (ev) => {
+        ev.stopPropagation();
+        void this.editarInserido(p, a);
+      });
+    }
     // Rotulo e botao lado a lado numa barra propria: presos as bordas da
     // caixa, se sobrepunham quando o item era estreito. Perto do topo da
     // pagina a barra vai para baixo da caixa.
-    const barra = el("div", { classe: "selecao-barra" + (a.limites[1] < 30 ? " abaixo" : "") }, rotulo, bt);
+    const barra = el("div", { classe: "selecao-barra" + (a.limites[1] < 30 ? " abaixo" : "") }, rotulo, ...extras, bt);
     caixa.append(barra);
     // Arrastar a caixa move a anotacao (no toque, a caixa tem touch-action:none).
     caixa.addEventListener("pointerdown", (ev) => {
@@ -767,27 +782,57 @@ export class Ferramentas {
     }
   }
 
+  /** Dialogo do texto inserido: para adicionar e para editar depois. */
+  private async pedirTextoInserido(titulo: string, ok: string, inicial: DadosItemTexto):
+    Promise<DadosItemTexto | null> {
+    const texto = el("textarea", { name: "texto", rows: 3 });
+    texto.value = inicial.texto;
+    const fonte = el("select", { name: "fonte" });
+    const fontes: [string, string][] = [["Helvetica", "Helvetica (sem serifa)"], ["Times-Roman", "Times (serifada)"],
+      ["Courier", "Courier (monoespaçada)"], ["Helvetica-Bold", "Helvetica negrito"], ["Times-Bold", "Times negrito"]];
+    if (!fontes.some(([v]) => v === inicial.fonte)) fontes.push([inicial.fonte, inicial.fonte]);
+    for (const [v, r] of fontes) fonte.append(el("option", { value: v, textContent: r }));
+    fonte.value = inicial.fonte;
+    const tamanho = el("input", { type: "number", min: "4", max: "144", step: "any",
+      value: String(Math.round(inicial.tamanho * 100) / 100) });
+    const hex = "#" + inicial.cor.map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+    const cor = el("input", { type: "color", value: hex });
+    const { valor } = await dialogo(titulo, [
+      campo("Texto", texto, "Entra no conteúdo da página. Letras fora do Latin-1 viram “?”."),
+      el("div", { classe: "linha-campos" }, campo("Fonte", fonte), campo("Tamanho", tamanho), campo("Cor", cor)),
+    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: ok, valor: "ok", primario: true }],
+    () => { texto.focus(); texto.select(); }, () => (!texto.value.trim() ? "Digite o texto." : null));
+    if (valor !== "ok") return null;
+    return { texto: texto.value, fonte: fonte.value, tamanho: Number(tamanho.value) || inicial.tamanho,
+      cor: [1, 3, 5].map((k) => parseInt(cor.value.slice(k, k + 2), 16) / 255) as Cor };
+  }
+
   private async dialogoTexto(pagina: number, pt: Ponto): Promise<void> {
     const estilo = this.c.estilo();
-    const texto = el("textarea", { name: "texto", rows: 3 });
-    const fonte = el("select", { name: "fonte" });
-    for (const [v, r] of [["Helvetica", "Helvetica (sem serifa)"], ["Times-Roman", "Times (serifada)"],
-      ["Courier", "Courier (monoespaçada)"], ["Helvetica-Bold", "Helvetica negrito"], ["Times-Bold", "Times negrito"]]) {
-      fonte.append(el("option", { value: v, textContent: r }));
-    }
-    const tamanho = el("input", { type: "number", min: "4", max: "144", value: String(estilo.tamanhoFonte) });
-    const { valor } = await dialogo("Adicionar texto", [
-      campo("Texto", texto, "Entra no conteúdo da página, com a cor escolhida na barra. Letras fora do Latin-1 viram “?”."),
-      el("div", { classe: "linha-campos" }, campo("Fonte", fonte), campo("Tamanho", tamanho)),
-    ], [{ rotulo: "Cancelar", valor: "c" }, { rotulo: "Adicionar", valor: "ok", primario: true }],
-    () => texto.focus(), () => (!texto.value.trim() ? "Digite o texto." : null));
-    if (valor !== "ok") return;
-    const t = Number(tamanho.value) || 12;
+    const r = await this.pedirTextoInserido("Adicionar texto", "Adicionar",
+      { texto: "", fonte: "Helvetica", tamanho: estilo.tamanhoFonte, cor: estilo.cor });
+    if (!r) return;
     // O clique marca o topo do texto; a linha de base fica ~0,8 em abaixo.
-    const id = await this.c.operar("inserirTexto", { pagina, origem: [pt[0], pt[1] + t * 0.8], texto: texto.value,
-      opcoes: { tamanho: t, cor: estilo.cor, fonte: fonte.value } });
+    const id = await this.c.operar("inserirTexto", { pagina, origem: [pt[0], pt[1] + r.tamanho * 0.8], texto: r.texto,
+      opcoes: { tamanho: r.tamanho, cor: r.cor, fonte: r.fonte } });
     await this.selecionarNovo(pagina, id);
   }
+
+  /** Editar o texto de um texto ja' inserido (no lugar onde ele esta'). */
+  private async editarInserido(p: PaginaVisor, a: InfoAnotacao): Promise<void> {
+    const dados = await this.c.motor.pedir<DadosItemTexto | null>("dadosItemTexto", { pagina: p.indice, id: a.id })
+      .catch(() => null);
+    if (!dados) {
+      avisar("Este texto não pode ser editado aqui. Use a ferramenta Editar texto.");
+      return;
+    }
+    const r = await this.pedirTextoInserido("Editar texto inserido", "Salvar", dados);
+    if (!r) return;
+    const id = await this.c.operar("editarItemTexto", { pagina: p.indice, id: a.id, texto: r.texto,
+      opcoes: { tamanho: r.tamanho, cor: r.cor, fonte: r.fonte } });
+    await this.selecionarNovo(p.indice, id);
+  }
+
 
   private async dialogoEditar(p: PaginaVisor, t: Trecho): Promise<void> {
     const caixa = el("div", { classe: "selecao-trecho" });
