@@ -207,7 +207,7 @@ try {
     await cdp("Page.navigate", { url: URL_APP + "sobre/" });
     ok(await aguardar(`document.querySelector("h1")?.textContent.includes("Editor de PDF online")`, 10000),
       "sem cookie: /sobre/ abre a página de apresentação");
-    ok(await avaliar(`getComputedStyle(document.querySelector(".botao")).backgroundColor !== "rgba(0, 0, 0, 0)"`),
+    ok(await aguardar(`document.readyState === "complete" && getComputedStyle(document.querySelector(".botao")).backgroundColor !== "rgba(0, 0, 0, 0)"`, 10000),
       "/sobre/: CSS próprio carregou");
     ok(await avaliar(`JSON.parse(document.querySelector('script[type="application/ld+json"]').textContent)["@graph"].length === 2`),
       "/sobre/: JSON-LD válido");
