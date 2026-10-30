@@ -201,6 +201,22 @@ try {
   const destinoWin = PASTA_DOWNLOADS.replace(/\//g, "\\");
   await cdp("Page.setDownloadBehavior", { behavior: "allow", downloadPath: destinoWin })
     .catch(() => cdp("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: destinoWin }));
+  if (COM_PORTAO) {
+    // Pagina de apresentacao: abre SEM cookie (buscadores), com o CSS (CSP ok)
+    // e "index, follow"; o sitemap tambem. Erros de CSP caem em `erros`.
+    await cdp("Page.navigate", { url: URL_APP + "sobre/" });
+    ok(await aguardar(`document.querySelector("h1")?.textContent.includes("Editor de PDF online")`, 10000),
+      "sem cookie: /sobre/ abre a página de apresentação");
+    ok(await avaliar(`getComputedStyle(document.querySelector(".botao")).backgroundColor !== "rgba(0, 0, 0, 0)"`),
+      "/sobre/: CSS próprio carregou");
+    ok(await avaliar(`JSON.parse(document.querySelector('script[type="application/ld+json"]').textContent)["@graph"].length === 2`),
+      "/sobre/: JSON-LD válido");
+    const sobre = await fetch(URL_APP + "sobre/", { headers: { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" } });
+    ok(sobre.status === 200 && !/noindex/.test(sobre.headers.get("x-robots-tag") ?? ""), "/sobre/ para o Googlebot: 200 e indexável");
+    const mapa = await fetch(URL_APP + "sitemap.xml");
+    ok(mapa.status === 200 && (await mapa.text()).includes("/sobre/</loc>"), "sitemap.xml lista /sobre/");
+    ok((await (await fetch(URL_APP + "robots.txt")).text()).includes("Allow: /sobre/"), "robots.txt libera /sobre/");
+  }
   await cdp("Page.navigate", { url: URL_APP });
   if (COM_PORTAO) {
     ok(await aguardar(`document.title.startsWith("Verificando")`, 10000), "sem cookie: página do desafio anti-robô");

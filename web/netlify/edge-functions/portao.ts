@@ -32,6 +32,11 @@ const DOMINIO_ANTIGO = "editpdfree.netlify.app";
 
 const LIVRES = /^\/(robots\.txt|favicon\.ico|manifest\.webmanifest|icons\/[\w.-]+)$/;
 
+// Pagina de apresentacao (estatica, sem o app) e o sitemap: abertas a todos,
+// inclusive buscadores. O cabecalho global do netlify.toml manda
+// "X-Robots-Tag: noindex"; aqui ele e' trocado por "index, follow".
+const INDEXAVEIS = /^\/(sobre|sobre\/|sobre\/index\.html|sobre\/sobre\.css|sitemap\.xml)$/;
+
 const CSP_PORTAO = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; "
   + "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
@@ -72,6 +77,12 @@ export default async function portao(req: Request, context: Contexto): Promise<R
   // icone e o manifesto sao pedidos pelo navegador SEM cookie (o manifesto vai
   // em modo CORS sem credenciais) e nao dao acesso a nada.
   if (LIVRES.test(caminho)) return context.next();
+  if (INDEXAVEIS.test(caminho)) {
+    const r = await context.next();
+    const saida = new Response(r.body, r);
+    saida.headers.set("X-Robots-Tag", "index, follow");
+    return saida;
+  }
 
   const segredo = Netlify.env.get("PORTAO_SEGREDO") ?? "";
   if (segredo.length < 16) {

@@ -1,0 +1,129 @@
+/* Pagina de apresentacao do EditPDFree (/sobre/). Mesmas cores do app. */
+
+:root {
+  --fundo: #eef0f3;
+  --painel: #ffffff;
+  --texto: #1d2127;
+  --texto-2: #5b6470;
+  --borda: #d8dce2;
+  --realce: #c62828;
+  --realce-texto: #ffffff;
+  --foco: #1565c0;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #15171b;
+    --painel: #1f2228;
+    --texto: #e8eaed;
+    --texto-2: #a3abb6;
+    --borda: #363b44;
+    --realce: #ef5350;
+    --realce-texto: #16181c;
+    --foco: #64b5f6;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+a { color: var(--foco); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+
+.caixa {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.topo {
+  background: var(--painel);
+  border-bottom: 1px solid var(--borda);
+}
+.topo-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto);
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.botao {
+  display: inline-block;
+  background: var(--realce);
+  color: var(--realce-texto);
+  font-weight: 600;
+  text-decoration: none;
+  padding: 12px 22px;
+  border-radius: 8px;
+}
+.botao:hover { filter: brightness(1.08); }
+.botao-pequeno { padding: 7px 14px; font-size: 0.95rem; }
+
+.destaque {
+  background: var(--painel);
+  border-bottom: 1px solid var(--borda);
+  padding: 40px 0 28px;
+}
+h1 {
+  font-size: clamp(1.6rem, 4.5vw, 2.3rem);
+  line-height: 1.2;
+  margin: 0 0 14px;
+}
+.chamada { font-size: 1.12rem; margin: 0 0 20px; }
+.nota { color: var(--texto-2); font-size: 0.9rem; }
+
+.texto { padding-top: 28px; }
+h2 { font-size: 1.35rem; margin: 0 0 10px; }
+
+.recursos {
+  padding-left: 20px;
+  margin: 0;
+}
+.recursos li { margin-bottom: 6px; }
+
+details {
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+summary { cursor: pointer; font-weight: 600; }
+details p { margin: 8px 0 0; }
+
+.final {
+  text-align: center;
+  padding-top: 32px;
+  padding-bottom: 24px;
+}
+.links { color: var(--texto-2); }
+
+.rodape {
+  border-top: 1px solid var(--borda);
+  color: var(--texto-2);
+  font-size: 0.88rem;
+  padding: 16px 0;
+  text-align: center;
+}

@@ -21,7 +21,7 @@ const { default: portao } = await import("../netlify/edge-functions/portao.ts");
 const TIPOS = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".wasm": "application/wasm", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json",
-  ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8",
+  ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8", ".xml": "application/xml",
 };
 
 function estatico(pathname) {

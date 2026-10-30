@@ -144,6 +144,18 @@ test("Edge Function: desafio, verificação, cookie e passagem", { timeout: 60_0
     await portao(new Request("https://pdf.exemplo" + livre), c.ctx);
     assert.equal(c.chamou(), true, livre);
   }
+  // 4b. Pagina de apresentacao e sitemap: livres e indexaveis (sem cookie).
+  for (const livre of ["/sobre/", "/sobre/index.html", "/sobre/sobre.css", "/sitemap.xml"]) {
+    c = contexto();
+    r = await portao(new Request("https://pdf.exemplo" + livre, { headers: NAVEGAR }), c.ctx);
+    assert.equal(c.chamou(), true, livre);
+    assert.equal(r.headers.get("x-robots-tag"), "index, follow", livre);
+  }
+  for (const preso of ["/sobre/../assets/x.js", "/sobrex", "/sobre/outra.html"]) {
+    c = contexto();
+    await portao(new Request("https://pdf.exemplo" + preso, { headers: NAVEGAR }), c.ctx);
+    assert.equal(c.chamou(), false, preso);
+  }
   c = contexto();
   await portao(new Request("https://pdf.exemplo/icons/../assets/x.js"), c.ctx);
   assert.equal(c.chamou(), false, "sem escapar pela lista de livres");

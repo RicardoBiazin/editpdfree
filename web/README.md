@@ -6,7 +6,9 @@ A versão web do [EditPDFree](https://github.com/RicardoBiazin/editpdfree): um e
 
 **Seus arquivos não saem do seu computador.** O PDF é aberto, editado e salvo aqui mesmo, pelo [MuPDF](https://mupdf.com) compilado para WebAssembly ([MuPDF.js](https://www.npmjs.com/package/mupdf)). Não há servidor recebendo arquivos, nem analytics, nem requisição externa: fontes, ícones, o motor `.wasm` e o OCR são servidos pelo próprio site. Depois da primeira visita o app funciona sem internet (PWA instalável).
 
-Versão **0.3.0**.
+Versão **0.7.1**.
+
+**Página de apresentação:** https://editpdfree.biazin.com.br/sobre/ — estática, sem o app, aberta a buscadores (é a única parte indexável do site).
 
 ## O que faz
 
@@ -120,7 +122,7 @@ Para que robôs não usem a versão online, uma **Edge Function** (`netlify/edge
 
 1. Quem chega sem o cookie `epf_passe` válido recebe a página “Verificando que você não é um robô…”. O navegador resolve uma prova de trabalho (achar um número que faça o SHA-256 começar com 21 bits zero — cerca de 1 s num PC, alguns segundos num celular) e envia a resposta para `/__portao/verificar`.
 2. A função confere a assinatura e a validade do desafio (5 minutos) e o trabalho, e grava o cookie `epf_passe` (`HttpOnly; Secure; SameSite=Lax`), válido por **7 dias** e só para aquele navegador (vai amarrado a um hash do User-Agent). A página recarrega o endereço original.
-3. Pedidos de arquivos (JS, wasm…) sem o cookie levam **403**. Ficam livres só `robots.txt`, `favicon.ico`, `manifest.webmanifest` e `/icons/*` (o navegador pede o ícone e o manifesto sem cookie).
+3. Pedidos de arquivos (JS, wasm…) sem o cookie levam **403**. Ficam livres só `robots.txt`, `favicon.ico`, `manifest.webmanifest` e `/icons/*` (o navegador pede o ícone e o manifesto sem cookie). Também ficam livres a página de apresentação `/sobre/` (`public/sobre/`) e o `sitemap.xml`: nesses o portão troca o `X-Robots-Tag` global por `index, follow`.
 4. Sem JavaScript, a página explica que ele é necessário.
 
 Depois da primeira passagem, o service worker serve o app do cache: **offline continua funcionando**, mesmo com o cookie vencido.
@@ -138,7 +140,7 @@ Sem `PORTAO_SEGREDO`, o portão **fecha** (erro 500 com mensagem clara) em produ
 - Não há estado no servidor, então não há proteção contra reuso: um desafio resolvido pode ser trocado por cookies várias vezes dentro dos seus 5 minutos.
 - Trocar de navegador ou atualizar o navegador (muda o User-Agent) pede a verificação de novo.
 - É uma barreira de custo, não um bloqueio absoluto: um robô disposto a gastar CPU passa.
-- **O portão também impede a indexação por buscadores**: além do desafio, há `robots.txt` com `Disallow: /`, o cabeçalho `X-Robots-Tag: noindex, nofollow` e a meta tag `robots`. O site não aparece no Google — de propósito.
+- **O portão também impede a indexação do app por buscadores**: além do desafio, há `robots.txt` com `Disallow: /`, o cabeçalho `X-Robots-Tag: noindex, nofollow` e a meta tag `robots`. O app não aparece no Google — de propósito. Só a página `/sobre/` é indexável (`Allow: /sobre/` no `robots.txt`, listada no `sitemap.xml`).
 
 Para testar o portão localmente sem publicar: `npm run build && npm run portao:local` (serve `dist/` atrás da Edge Function, com um segredo de teste fixo).
 

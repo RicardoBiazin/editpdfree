@@ -30,7 +30,9 @@ function serviceWorker(): Plugin {
         .map((c) => "/" + relative(publico, c).split("\\").join("/"))
         // O OCR (~6 MB por idioma + nucleo) NAO entra no precache: so' e' baixado
         // quando o usuario usa o OCR, e o service worker guarda na primeira vez.
-        .filter((c) => !/^\/(robots\.txt|_headers|_redirects)$/.test(c) && !c.startsWith("/ocr/"));
+        // A pagina de apresentacao (/sobre/) e o sitemap tambem ficam de fora: nao sao o app.
+        .filter((c) => !/^\/(robots\.txt|sitemap\.xml|_headers|_redirects)$/.test(c) && !c.startsWith("/ocr/")
+          && !c.startsWith("/sobre/"));
       const doBuild = Object.keys(bundle).filter((n) => !n.endsWith(".map") && n !== "index.html")
         .map((n) => "/" + n);
       const lista = ["/", ...doBuild, ...doPublico].sort();
