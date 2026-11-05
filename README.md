@@ -109,3 +109,7 @@ build.bat umarquivo    :: dist\EditPDFree.exe portátil
 ## Licença
 
 [AGPL-3.0](LICENSE). O motor de PDF é o [PyMuPDF](https://github.com/pymupdf/PyMuPDF)/MuPDF (AGPL-3.0); a interface usa [Qt for Python](https://doc.qt.io/qtforpython/) (LGPL-3.0); a assinatura, o [pyHanko](https://github.com/MatthiasValvekens/pyHanko) (MIT); o OCR, os dados do [Tesseract](https://github.com/tesseract-ocr/tessdata_fast) (Apache-2.0).
+
+## Código de conduta
+
+Veja [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
