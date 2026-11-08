@@ -30,7 +30,7 @@ declare const Netlify: { env: { get(nome: string): string | undefined } };
 const DOMINIO_OFICIAL = "editpdfree.biazin.com.br";
 const DOMINIO_ANTIGO = "editpdfree.netlify.app";
 
-const LIVRES = /^\/(robots\.txt|favicon\.ico|manifest\.webmanifest|icons\/[\w.-]+)$/;
+const LIVRES = /^\/(robots\.txt|llms\.txt|favicon\.ico|manifest\.webmanifest|icons\/[\w.-]+)$/;
 
 // Pagina de apresentacao (estatica, sem o app) e o sitemap: abertas a todos,
 // inclusive buscadores. O cabecalho global do netlify.toml manda

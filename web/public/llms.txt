@@ -1,0 +1,19 @@
+# EditPDFree
+
+> Editor de PDF gratuito e de código aberto (AGPL-3.0) para Windows e navegador. Edita o texto que já está no PDF mantendo a fonte, anota, assina com certificado A1 no padrão ICP-Brasil, tarja dados de forma definitiva, faz OCR de PDFs escaneados em português e inglês e protege com senha. Criado por Ricardo Biazin (biazin.com.br).
+
+A versão para navegador processa o PDF no próprio computador: o arquivo não é enviado a nenhum servidor. A interface é em português (Brasil). O aplicativo web é protegido contra robôs, então a descrição completa está na página de apresentação.
+
+## Apresentação
+
+- [EditPDFree: apresentação e recursos](https://editpdfree.biazin.com.br/sobre/): o que o programa faz, como baixar e como usar a versão web.
+
+## Downloads e código
+
+- [Versões para Windows](https://github.com/RicardoBiazin/editpdfree/releases): executável portátil, sem instalação.
+- [Código-fonte](https://github.com/RicardoBiazin/editpdfree): licença AGPL-3.0.
+- [Página da ferramenta em biazin.com.br](https://biazin.com.br/ferramentas/editpdfree/): descrição, requisitos e perguntas frequentes.
+
+## Autor
+
+- Ricardo Biazin, RVJV Soluções Corporativas (Florianópolis/SC). [LinkedIn](https://www.linkedin.com/in/ricardo-biazin/). [Outras ferramentas gratuitas](https://biazin.com.br/).

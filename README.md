@@ -113,3 +113,7 @@ build.bat umarquivo    :: dist\EditPDFree.exe portátil
 ## Código de conduta
 
 Veja [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+## Visibilidade para agentes de IA
+
+`web/public/llms.txt` descreve o programa para assistentes de IA (padrão llmstxt.org). O portão deixa passar só `/llms.txt`, `/robots.txt`, `/sitemap.xml` e `/sobre/`; `robots.txt` libera os rastreadores de IA conhecidos para essas páginas.
